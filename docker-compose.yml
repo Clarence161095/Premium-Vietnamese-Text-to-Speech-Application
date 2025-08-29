@@ -21,6 +21,7 @@ services:
       - ./data:/data                         # Voice profiles and audio data
       - ./models:/models:ro                  # Vietnamese models (read-only)
       - ./ZipVoice:/ZipVoice:ro              # ZipVoice source (read-only)
+      - ./DOING:/DOING                       # Processing directory (read-write for monitoring)
       - /tmp:/tmp                            # Temporary processing files
     
     environment:

@@ -12,5 +12,12 @@
     "path": "/data/tina",
     "is_default": true,
     "created_at": "2025-08-28"
+  },
+  "NB-Kim-Hanh": {
+    "name": "Nhà Báo Kim Hạnh",
+    "description": "Nữa nhà báo (lớn tuổi)",
+    "path": "/data/NB-Kim-Hanh",
+    "is_default": false,
+    "created_at": "2025-08-29 10:03:45"
   }
 }

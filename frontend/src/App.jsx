@@ -14,16 +14,13 @@ const translations = {
     lightMode: "Chế độ sáng",
     language: "Ngôn ngữ",
 
-    // Quality Presets
-    qualityPresets: "Preset chất lượng",
-    fast: "Nhanh",
-    balanced: "Trung bình",
-    high: "Cao",
-    premium: "Cao nhất",
-    fastDesc: "Tạo nhanh (~6-8s)",
-    balancedDesc: "Cân bằng chất lượng/tốc độ (~8-12s)",
-    highDesc: "Chất lượng cao (~12-16s)",
-    premiumDesc: "Chất lượng tối đa (~15-20s)",
+    // GPU & System Monitoring
+    gpuStatus: "Trạng thái GPU",
+    gpuTemperature: "Nhiệt độ GPU",
+    gpuUtilization: "Sử dụng GPU",
+    vramUsage: "Sử dụng VRAM",
+    emergencyStop: "Dừng khẩn cấp",
+    renderStatus: "Trạng thái xử lý",
 
     // Text Input
     textInput: "Nhập văn bản",
@@ -45,6 +42,18 @@ const translations = {
     generating: "Đang tạo giọng nói...",
     result: "Kết quả",
     download: "Tải xuống",
+    
+    // Recent Renders
+    recentRenders: "Lịch sử tạo giọng",
+    noRecentRenders: "Chưa có lịch sử tạo giọng nào trong 8 giờ qua",
+    loadingHistory: "Đang tải lịch sử...",
+    page: "Trang",
+    records: "bản ghi",
+    createdAt: "Tạo lúc",
+    duration: "Thời lượng",
+    fileSize: "Kích thước",
+    play: "Phát",
+    downloading: "Đang tải...",
 
     // Advanced Settings
     advancedSettings: "Cài đặt nâng cao",
@@ -118,16 +127,13 @@ const translations = {
     lightMode: "Light Mode",
     language: "Language",
 
-    // Quality Presets
-    qualityPresets: "Quality Presets",
-    fast: "Fast",
-    balanced: "Balanced",
-    high: "High",
-    premium: "Premium",
-    fastDesc: "Quick generation (~6-8s)",
-    balancedDesc: "Balanced quality/speed (~8-12s)",
-    highDesc: "High quality (~12-16s)",
-    premiumDesc: "Maximum quality (~15-20s)",
+    // GPU & System Monitoring
+    gpuStatus: "GPU Status",
+    gpuTemperature: "GPU Temperature",
+    gpuUtilization: "GPU Utilization",
+    vramUsage: "VRAM Usage",
+    emergencyStop: "Emergency Stop",
+    renderStatus: "Render Status",
 
     // Text Input
     textInput: "Text Input",
@@ -149,6 +155,18 @@ const translations = {
     generating: "Generating speech...",
     result: "Result",
     download: "Download",
+    
+    // Recent Renders
+    recentRenders: "Recent Renders",
+    noRecentRenders: "No recent renders in the last 8 hours",
+    loadingHistory: "Loading history...",
+    page: "Page",
+    records: "records",
+    createdAt: "Created at",
+    duration: "Duration",
+    fileSize: "File Size",
+    play: "Play",
+    downloading: "Downloading...",
 
     // Advanced Settings
     advancedSettings: "Advanced Settings",
@@ -337,273 +355,408 @@ const ThemeToggle = ({ currentTheme, onThemeChange, t }) => (
 
 // === MAIN COMPONENTS === //
 
-const VoiceProfileCard = ({ profileId, profile, isSelected, onSelect, onEdit, onDelete, t }) => (
-  <div
-    className={`card-profile ${isSelected ? 'selected' : ''}`}
-    onClick={() => onSelect(profileId)}
-  >
-    <div className="flex items-center justify-between mb-3">
-      <div className="flex items-center">
-        <div className="w-12 h-12 rounded-full bg-gradient-to-r from-indigo-400 to-purple-500 flex items-center justify-center mr-3 animate-float">
-          <i className="fas fa-microphone text-white text-lg"></i>
-        </div>
-        <div>
-          <h3 className="text-white font-semibold text-lg">{profile.name}</h3>
-          <p className="text-white/70 text-sm">{profile.description}</p>
-        </div>
-      </div>
-      {isSelected && (
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit(profileId);
-            }}
-            className="text-white/70 hover:text-white transition-colors"
-          >
-            <i className="fas fa-edit"></i>
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(profileId);
-            }}
-            className="text-red-400 hover:text-red-300 transition-colors"
-          >
-            <i className="fas fa-trash"></i>
-          </button>
-        </div>
-      )}
-    </div>
-    <div className="text-xs text-white/50">
-      <i className="fas fa-clock mr-1"></i>
-      {profile.created_at || 'Recently created'}
-    </div>
-  </div>
-);
-
-const QualityPresets = ({ onPresetSelect, currentSettings, t }) => {
-  const presets = [
-    {
-      name: t.fast,
-      icon: 'fas fa-bolt',
-      description: t.fastDesc,
-      settings: { guidance_scale: 0.9, num_step: 8, speed: 1.0 },
-      tooltip: t.tooltips.fastPreset,
-      variant: 'fast'
-    },
-    {
-      name: t.balanced,
-      icon: 'fas fa-balance-scale',
-      description: t.balancedDesc,
-      settings: { guidance_scale: 1.0, num_step: 16, speed: 1.0 },
-      tooltip: t.tooltips.balancedPreset,
-      variant: 'balanced'
-    },
-    {
-      name: t.high,
-      icon: 'fas fa-star',
-      description: t.highDesc,
-      settings: { guidance_scale: 1.1, num_step: 22, speed: 1.0 },
-      tooltip: t.tooltips.highPreset,
-      variant: 'high'
-    },
-    {
-      name: t.premium,
-      icon: 'fas fa-crown',
-      description: t.premiumDesc,
-      settings: { guidance_scale: 1.2, num_step: 28, speed: 1.0 },
-      tooltip: t.tooltips.premiumPreset,
-      variant: 'premium'
-    }
-  ];
-
+const VoiceProfileCard = ({ profileId, profile, isSelected, onSelect, onEdit, onDelete, t }) => {
+  // Check if this is a default profile (tina or NSUT-Phu-Thang)
+  const isDefaultProfile = profileId === 'tina' || profileId === 'NSUT-Phu-Thang';
+  
   return (
-    <div className="preset-grid animate-fade-in-up">
-      {presets.map((preset, index) => (
-        <Tooltip key={preset.name} content={preset.tooltip}>
-          <button
-            onClick={() => onPresetSelect(preset.settings)}
-            className={`preset-card preset-${preset.variant}`}
-            style={{ animationDelay: `${index * 0.1}s` }}
-          >
-            <div className="preset-icon">
-              <i className={preset.icon}></i>
-            </div>
-            <h3 className="preset-title">{preset.name}</h3>
-            <p className="preset-description">{preset.description}</p>
-          </button>
-        </Tooltip>
-      ))}
+    <div
+      className={`card-profile ${isSelected ? 'selected' : ''}`}
+      onClick={() => onSelect(profileId)}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center">
+          <div className="w-12 h-12 rounded-full bg-gradient-to-r from-indigo-400 to-purple-500 flex items-center justify-center mr-3 animate-float">
+            <i className="fas fa-microphone text-white text-lg"></i>
+          </div>
+          <div>
+            <h3 className="text-white font-semibold text-lg">
+              {profile.name}
+              {isDefaultProfile && (
+                <span className="ml-2 text-xs bg-blue-500/20 text-blue-300 px-2 py-1 rounded">
+                  Mặc định
+                </span>
+              )}
+            </h3>
+            <p className="text-white/70 text-sm">{profile.description}</p>
+          </div>
+        </div>
+        {isSelected && !isDefaultProfile && (
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(profileId);
+              }}
+              className="text-white/70 hover:text-white transition-colors"
+            >
+              <i className="fas fa-edit"></i>
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(profileId);
+              }}
+              className="text-red-400 hover:text-red-300 transition-colors"
+            >
+              <i className="fas fa-trash"></i>
+            </button>
+          </div>
+        )}
+        {isSelected && isDefaultProfile && (
+          <div className="flex items-center space-x-2">
+            <span className="text-white/40 text-xs">
+              Không thể chỉnh sửa
+            </span>
+          </div>
+        )}
+      </div>
+      <div className="text-xs text-white/50">
+        <i className="fas fa-clock mr-1"></i>
+        {profile.created_at || 'Recently created'}
+      </div>
     </div>
   );
 };
 
-const AdvancedControls = ({ settings, onChange, isExpanded, onToggle, t }) => (
-  <div className="card mb-6 animate-fade-in-up">
-    <button
-      onClick={onToggle}
-      className="w-full flex items-center justify-between text-white font-semibold text-lg mb-4"
-    >
-      <span className="flex items-center">
-        <i className="fas fa-sliders-h mr-3"></i>
-        {t.advancedSettings}
-      </span>
-      <i className={`fas fa-chevron-${isExpanded ? 'up' : 'down'} transition-transform duration-300`}></i>
-    </button>
+const GPUMonitor = ({ t }) => {
+  const [gpuStatus, setGpuStatus] = useState({
+    temperature: 0,
+    utilization: 0,
+    memory_used: 0,
+    memory_total: 0,
+    status: "UNKNOWN"
+  });
+  const [renderStatus, setRenderStatus] = useState({
+    is_rendering: false,
+    current_sentence: 0,
+    total_sentences: 0,
+    estimated_time_remaining: 0,
+    elapsed_time: 0
+  });
 
-    {isExpanded && (
-      <div className="space-y-6 animate-slide-in-left">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <Tooltip content={t.tooltips.guidanceScale}>
-              <label className="block text-white font-medium mb-3">
-                <i className="fas fa-magic mr-2"></i>
-                {t.guidanceScale}: {settings.guidance_scale}
-              </label>
-            </Tooltip>
-            <input
-              type="range"
-              min="0.5"
-              max="2.0"
-              step="0.1"
-              value={settings.guidance_scale}
-              onChange={(e) => onChange('guidance_scale', parseFloat(e.target.value))}
-              className="range-slider"
-            />
-            <div className="flex justify-between text-white/60 text-xs mt-1">
-              <span>{t.low}</span>
-              <span>{t.high}</span>
-            </div>
-          </div>
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        // Get GPU status
+        const gpuResponse = await fetch('http://localhost:8000/gpu_status');
+        if (gpuResponse.ok) {
+          const gpuData = await gpuResponse.json();
+          setGpuStatus(gpuData);
+        }
 
-          <div>
-            <Tooltip content={t.tooltips.generationSteps}>
-              <label className="block text-white font-medium mb-3">
-                <i className="fas fa-step-forward mr-2"></i>
-                {t.generationSteps}: {settings.num_step}
-              </label>
-            </Tooltip>
-            <input
-              type="range"
-              min="8"
-              max="32"
-              step="2"
-              value={settings.num_step}
-              onChange={(e) => onChange('num_step', parseInt(e.target.value))}
-              className="range-slider"
-            />
-            <div className="flex justify-between text-white/60 text-xs mt-1">
-              <span>{t.fast}</span>
-              <span>{t.quality}</span>
-            </div>
-          </div>
+        // Get render status
+        const renderResponse = await fetch('http://localhost:8000/render_status');
+        if (renderResponse.ok) {
+          const renderData = await renderResponse.json();
+          setRenderStatus(renderData);
+        }
+      } catch (error) {
+        console.warn('Failed to fetch monitoring data:', error);
+      }
+    }, 5000); // Update every 5 seconds
 
-          <div>
-            <Tooltip content={t.tooltips.speed}>
-              <label className="block text-white font-medium mb-3">
-                <i className="fas fa-tachometer-alt mr-2"></i>
-                {t.speed}: {settings.speed}x
-              </label>
-            </Tooltip>
-            <input
-              type="range"
-              min="0.5"
-              max="2.0"
-              step="0.1"
-              value={settings.speed}
-              onChange={(e) => onChange('speed', parseFloat(e.target.value))}
-              className="range-slider"
-            />
-            <div className="flex justify-between text-white/60 text-xs mt-1">
-              <span>{t.slow}</span>
-              <span>{t.fast}</span>
-            </div>
-          </div>
+    return () => clearInterval(interval);
+  }, []);
 
-          <div>
-            <Tooltip content={t.tooltips.gpuUsage}>
-              <label className="block text-white font-medium mb-3">
-                <i className="fas fa-microchip mr-2"></i>
-                {t.gpuUsage}: {Math.round(settings.gpu_offload * 100)}%
-              </label>
-            </Tooltip>
-            <input
-              type="range"
-              min="0.1"
-              max="1.0"
-              step="0.1"
-              value={settings.gpu_offload}
-              onChange={(e) => onChange('gpu_offload', parseFloat(e.target.value))}
-              className="range-slider"
-            />
-            <div className="flex justify-between text-white/60 text-xs mt-1">
-              <span>{t.economy}</span>
-              <span>{t.maximum}</span>
-            </div>
-          </div>
+  const handleEmergencyStop = async () => {
+    try {
+      await fetch('http://localhost:8000/stop_render', { method: 'POST' });
+      showNotification('success', 'Rendering stopped successfully');
+    } catch (error) {
+      showNotification('error', 'Failed to stop rendering');
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'NORMAL': return 'text-green-400';
+      case 'THROTTLE': return 'text-yellow-400';
+      case 'EMERGENCY': return 'text-red-400';
+      default: return 'text-gray-400';
+    }
+  };
+
+  return (
+    <div className="card animate-slide-in-right">
+      <h3 className="text-lg font-bold text-white mb-4 flex items-center">
+        <i className="fas fa-tachometer-alt mr-3"></i>
+        {t.gpuStatus}
+      </h3>
+      
+      <div className="space-y-3">
+        <div className="flex justify-between text-white/80">
+          <span>{t.gpuTemperature}:</span>
+          <span className={`font-semibold ${getStatusColor(gpuStatus.status)}`}>
+            {gpuStatus.temperature.toFixed(1)}°C
+          </span>
+        </div>
+        
+        <div className="flex justify-between text-white/80">
+          <span>{t.gpuUtilization}:</span>
+          <span className="font-semibold">{gpuStatus.utilization.toFixed(1)}%</span>
+        </div>
+        
+        <div className="flex justify-between text-white/80">
+          <span>{t.vramUsage}:</span>
+          <span className="font-semibold">
+            {(gpuStatus.memory_used / 1024).toFixed(1)}GB / {(gpuStatus.memory_total / 1024).toFixed(1)}GB
+          </span>
         </div>
 
-        <div>
-          <Tooltip content={t.tooltips.tokenLimit}>
-            <label className="block text-white font-medium mb-3">
-              <i className="fas fa-align-left mr-2"></i>
-              {t.tokenLimit}: {settings.context_length.toLocaleString()}
-            </label>
-          </Tooltip>
-          <input
-            type="number"
-            min="65000"
-            max="130000"
-            step="1000"
-            value={settings.context_length}
-            onChange={(e) => onChange('context_length', parseInt(e.target.value))}
-            className="form-input"
-            placeholder="Maximum 130,000 tokens"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <Tooltip content={t.tooltips.featureScale}>
-              <label className="block text-white font-medium mb-3">
-                <i className="fas fa-wave-square mr-2"></i>
-                {t.featureScale}: {settings.feat_scale}
-              </label>
-            </Tooltip>
-            <input
-              type="range"
-              min="0.05"
-              max="0.3"
-              step="0.05"
-              value={settings.feat_scale}
-              onChange={(e) => onChange('feat_scale', parseFloat(e.target.value))}
-              className="range-slider"
-            />
+        {renderStatus.is_rendering && (
+          <div className="mt-4 p-3 bg-blue-500/20 rounded-lg">
+            <div className="flex justify-between text-white/80 mb-2">
+              <span>Progress:</span>
+              <span>{renderStatus.current_sentence}/{renderStatus.total_sentences}</span>
+            </div>
+            <div className="flex justify-between text-white/80 mb-2">
+              <span>Remaining:</span>
+              <span>{Math.round(renderStatus.estimated_time_remaining)}s</span>
+            </div>
+            <div className="w-full bg-white/20 rounded-full h-2">
+              <div 
+                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${(renderStatus.current_sentence / renderStatus.total_sentences) * 100}%` }}
+              ></div>
+            </div>
           </div>
+        )}
 
-          <div>
-            <Tooltip content={t.tooltips.targetRMS}>
-              <label className="block text-white font-medium mb-3">
-                <i className="fas fa-volume-up mr-2"></i>
-                {t.targetRMS}: {settings.target_rms}
-              </label>
-            </Tooltip>
-            <input
-              type="range"
-              min="0.05"
-              max="0.3"
-              step="0.05"
-              value={settings.target_rms}
-              onChange={(e) => onChange('target_rms', parseFloat(e.target.value))}
-              className="range-slider"
-            />
-          </div>
-        </div>
+        {(renderStatus.is_rendering || gpuStatus.status === 'EMERGENCY') && (
+          <button
+            onClick={handleEmergencyStop}
+            className="btn-danger w-full mt-4"
+          >
+            <i className="fas fa-stop mr-2"></i>
+            {t.emergencyStop}
+          </button>
+        )}
       </div>
-    )}
-  </div>
-);
+    </div>
+  );
+};
+
+const RenderStatusMonitor = ({ t, onEmergencyStop }) => {
+  const [renderStatus, setRenderStatus] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchRenderStatus = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/render_status');
+        const data = await response.json();
+        setRenderStatus(data);
+      } catch (error) {
+        console.error('Failed to fetch render status:', error);
+      }
+    };
+
+    // Poll render status every 2 seconds during processing
+    const interval = setInterval(fetchRenderStatus, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleEmergencyStop = async () => {
+    setLoading(true);
+    try {
+      await fetch('http://localhost:8000/stop_render', { method: 'POST' });
+      onEmergencyStop();
+    } catch (error) {
+      console.error('Failed to stop render:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="card animate-fade-in-up">
+      <h3 className="text-lg font-bold text-white mb-4 flex items-center">
+        <i className="fas fa-cogs mr-3"></i>
+        {t.renderStatus}
+      </h3>
+      
+      {renderStatus && (
+        <div className="space-y-3">
+          <div className="flex justify-between text-white/80">
+            <span>Status:</span>
+            <span className={`font-semibold ${
+              renderStatus.is_processing ? 'text-yellow-400' : 'text-green-400'
+            }`}>
+              {renderStatus.is_processing ? 'Processing...' : 'Ready'}
+            </span>
+          </div>
+          
+          {renderStatus.current_sentence && (
+            <div className="text-white/60 text-sm">
+              <div>Sentence: {renderStatus.current_sentence}/{renderStatus.total_sentences}</div>
+              <div className="w-full bg-white/10 rounded-full h-2 mt-1">
+                <div 
+                  className="bg-blue-400 h-2 rounded-full transition-all duration-300" 
+                  style={{ width: `${(renderStatus.current_sentence / renderStatus.total_sentences) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
+          
+          {renderStatus.estimated_time_remaining && (
+            <div className="text-white/60 text-sm">
+              Estimated time: {renderStatus.estimated_time_remaining}s
+            </div>
+          )}
+        </div>
+      )}
+      
+      {renderStatus?.is_processing && (
+        <button
+          onClick={handleEmergencyStop}
+          disabled={loading}
+          className="btn-danger w-full mt-4"
+        >
+          <i className="fas fa-stop mr-2"></i>
+          {loading ? 'Stopping...' : t.emergencyStop}
+        </button>
+      )}
+    </div>
+  );
+};
+
+const RecentRenders = ({ t, recentRenders, loading, pagination, onPageChange, onPlayRender }) => {
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
+  const formatDateTime = (isoString) => {
+    const date = new Date(isoString);
+    return date.toLocaleString('vi-VN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const handleDownload = async (record) => {
+    try {
+      const response = await fetch(`http://localhost:8000/render_file/${record.id}`);
+      if (!response.ok) throw new Error('Download failed');
+      
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `render_${record.id}.wav`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download failed:', error);
+    }
+  };
+
+  return (
+    <div className="card animate-slide-in-left">
+      <h3 className="text-lg font-bold text-white mb-4 flex items-center">
+        <i className="fas fa-history mr-3"></i>
+        {t.recentRenders}
+      </h3>
+      
+      {loading ? (
+        <div className="text-center py-8">
+          <LoadingSpinner />
+          <p className="text-white/70 mt-2">{t.loadingHistory}</p>
+        </div>
+      ) : recentRenders.length === 0 ? (
+        <div className="text-center py-8 text-white/60">
+          <i className="fas fa-clock text-2xl mb-2"></i>
+          <p>{t.noRecentRenders}</p>
+        </div>
+      ) : (
+        <>
+          <div className="space-y-3 mb-4">
+            {recentRenders.map((record) => (
+              <div key={record.id} className="bg-white/5 rounded-lg p-3 hover:bg-white/10 transition-colors">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm font-medium truncate">
+                      {record.full_text_preview}
+                    </p>
+                    <div className="flex items-center space-x-4 mt-1 text-xs text-white/60">
+                      <span>
+                        <i className="fas fa-user mr-1"></i>
+                        {record.profile_id}
+                      </span>
+                      <span>
+                        <i className="fas fa-clock mr-1"></i>
+                        {formatDateTime(record.timestamp)}
+                      </span>
+                      <span>
+                        <i className="fas fa-text-width mr-1"></i>
+                        {record.word_count} từ
+                      </span>
+                      <span>
+                        <i className="fas fa-file mr-1"></i>
+                        {formatFileSize(record.file_size)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2 ml-2">
+                    <button
+                      onClick={() => onPlayRender(record)}
+                      className="text-blue-400 hover:text-blue-300 transition-colors"
+                      title={t.play}
+                    >
+                      <i className="fas fa-play"></i>
+                    </button>
+                    <button
+                      onClick={() => handleDownload(record)}
+                      className="text-green-400 hover:text-green-300 transition-colors"
+                      title={t.download}
+                    >
+                      <i className="fas fa-download"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          {/* Pagination */}
+          {pagination.total_pages > 1 && (
+            <div className="flex items-center justify-between text-sm text-white/70">
+              <span>
+                {t.page} {pagination.page} / {pagination.total_pages} 
+                ({pagination.total_records} {t.records})
+              </span>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => onPageChange(pagination.page - 1)}
+                  disabled={!pagination.has_prev}
+                  className="px-3 py-1 bg-white/10 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/20 transition-colors"
+                >
+                  <i className="fas fa-chevron-left"></i>
+                </button>
+                <button
+                  onClick={() => onPageChange(pagination.page + 1)}
+                  disabled={!pagination.has_next}
+                  className="px-3 py-1 bg-white/10 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/20 transition-colors"
+                >
+                  <i className="fas fa-chevron-right"></i>
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+};
 
 // === MAIN APP === //
 
@@ -626,13 +779,6 @@ function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // TODO: Persist advanced settings state
-  // useEffect(() => {
-  //   if (showAdvanced !== null) {
-  //     localStorage.setItem('showAdvanced', JSON.stringify(showAdvanced || true));
-  //   }
-  // }, [showAdvanced]);
-
   // State management
   const [text, setText] = useState('');
   const [selectedProfile, setSelectedProfile] = useState('');
@@ -641,23 +787,23 @@ function App() {
   const [audio, setAudio] = useState(null);
   const [notification, setNotification] = useState(null);
   const [showAddProfile, setShowAddProfile] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(() => {
-    const stored = localStorage.getItem('showAdvanced');
-    return stored !== null ? JSON.parse(stored) : true;
-  });
   const [isPlaying, setIsPlaying] = useState(false);
   const [lastGenerationTime, setLastGenerationTime] = useState(null);
-
-  // Audio settings
-  const [settings, setSettings] = useState({
-    speed: 1.0,
-    guidance_scale: 1.0,
-    num_step: 16,
-    feat_scale: 0.1,
-    target_rms: 0.1,
-    context_length: 10000,
-    gpu_offload: 0.9
+  
+  // Recent renders state
+  const [recentRenders, setRecentRenders] = useState([]);
+  const [rendersLoading, setRendersLoading] = useState(false);
+  const [rendersPagination, setRendersPagination] = useState({
+    page: 1,
+    per_page: 10,
+    total_records: 0,
+    total_pages: 1,
+    has_next: false,
+    has_prev: false
   });
+  
+  // Rendering status monitoring
+  const [isCurrentlyRendering, setIsCurrentlyRendering] = useState(false);
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({
@@ -715,9 +861,10 @@ function App() {
     localStorage.setItem('language', lang);
   };
 
-  // Load profiles on component mount
+  // Load profiles and recent renders on component mount
   useEffect(() => {
     loadProfiles();
+    loadRecentRenders();
   }, []);
 
   // Audio event listeners
@@ -746,38 +893,72 @@ function App() {
     }
   };
 
+  const loadRecentRenders = async (page = 1) => {
+    try {
+      setRendersLoading(true);
+      const response = await fetch(`http://localhost:8000/recent_renders?page=${page}&per_page=10`);
+      const data = await response.json();
+      setRecentRenders(data.data || []);
+      setRendersPagination(data.pagination || {
+        page: 1,
+        per_page: 10,
+        total_records: 0,
+        total_pages: 1,
+        has_next: false,
+        has_prev: false
+      });
+    } catch (error) {
+      console.error('Failed to load recent renders:', error);
+      setRecentRenders([]);
+    } finally {
+      setRendersLoading(false);
+    }
+  };
+
   const showNotification = (type, message) => {
     setNotification({ type, message });
   };
 
-  const handleSettingChange = (key, value) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
-  };
-
-  const handlePresetSelect = (presetSettings) => {
-    setSettings(prev => ({ ...prev, ...presetSettings }));
-    showNotification('success', t.presetApplied);
-  };
-
   const estimateProcessingTime = () => {
     const wordCount = text.split(' ').filter(w => w.length > 0).length;
-    const baseTime = Math.max(6, wordCount * 0.3); // Base time calculation
-    const qualityMultiplier = settings.num_step / 16; // Adjust based on steps
-    const speedMultiplier = 1 / settings.speed; // Adjust based on speed
-    return Math.round(baseTime * qualityMultiplier * speedMultiplier);
+    const baseTime = Math.max(2, wordCount * 0.5); // Base time for sentence-by-sentence processing
+    return Math.round(baseTime);
   };
 
-  const getQualityLevel = () => {
-    if (settings.guidance_scale >= 1.2) return language === 'vi' ? 'Cao nhất' : 'Premium';
-    if (settings.guidance_scale >= 1.1) return language === 'vi' ? 'Cao' : 'High';
-    if (settings.guidance_scale >= 1.0) return language === 'vi' ? 'Trung bình' : 'Balanced';
-    return language === 'vi' ? 'Nhanh' : 'Fast';
+  const handleEmergencyStop = () => {
+    setLoading(false);
+    setAudio(null);
+    showNotification('success', 'Processing stopped successfully');
   };
 
-  const getProcessingMode = () => {
-    const wordCount = text.split(' ').filter(w => w.length > 0).length;
-    if (wordCount <= 20) return language === 'vi' ? 'Xử lý nhanh' : 'Fast processing';
-    return language === 'vi' ? 'Xử lý batch' : 'Batch processing';
+  // Clean Vietnamese text before synthesis
+  const cleanVietnameseText = (text) => {
+    if (!text) return '';
+    
+    // Remove parenthetical annotations (including Chinese characters, explanations, etc.)
+    // Matches: (content), [content], （content）
+    text = text.replace(/[(\[（][^)\]）]*[)\]）]/g, '');
+    
+    // Remove emojis and Unicode symbols
+    text = text.replace(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2500}-\u{2BEF}]|[\u{2702}-\u{27B0}]|[\u{24C2}-\u{1F251}]|[\u{1f926}-\u{1f937}]|[\u{10000}-\u{10ffff}]|[\u2640-\u2642]|[\u2600-\u2B55]|[\u200d]|[\u23cf]|[\u23e9]|[\u231a]|[\ufe0f]|[\u3030]/gu, '');
+    
+    // Remove arrow symbols and special markers
+    text = text.replace(/[→←↑↓➡️⬅️⬆️⬇️▶️◀️▲▼👉👈👆👇]/g, '');
+    
+    // Normalize multiple whitespace to single space
+    text = text.replace(/\s+/g, ' ');
+    
+    // Clean up spacing around punctuation
+    text = text.replace(/\s*([.!?…,;:])\s*/g, '$1 ');
+    
+    // Remove extra spaces at beginning of lines
+    text = text.replace(/^\s+/gm, '');
+    
+    // Remove trailing spaces and clean up final result
+    text = text.replace(/\s+$/, '');
+    text = text.trim();
+    
+    return text;
   };
 
   const handleSynthesize = async () => {
@@ -786,17 +967,29 @@ function App() {
       return;
     }
 
+    // Clean the text before sending to backend
+    const cleanedText = cleanVietnameseText(text);
+    
+    if (!cleanedText.trim()) {
+      showNotification('error', 'Văn bản sau khi làm sạch không có nội dung hợp lệ');
+      return;
+    }
+
     setLoading(true);
+    setIsCurrentlyRendering(true);  // Track rendering state
     setAudio(null);
     const startTime = Date.now();
 
     try {
       const formData = new FormData();
       if (selectedProfile) formData.append('profile_id', selectedProfile);
-      formData.append('text', text);
+      formData.append('text', cleanedText);  // Use cleaned text
 
-      Object.entries(settings).forEach(([key, value]) => {
-        formData.append(key, value);
+      console.log('Sending request with:', {
+        profile_id: selectedProfile || 'default',
+        original_text_length: text.length,
+        cleaned_text_length: cleanedText.length,
+        text_preview: cleanedText.substring(0, 50) + '...'
       });
 
       const response = await fetch('http://localhost:8000/synthesize_speech', {
@@ -804,8 +997,12 @@ function App() {
         body: formData,
       });
 
+      console.log('Response status:', response.status, response.statusText);
+
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}\n${errorText}`);
       }
 
       const audioBlob = await response.blob();
@@ -813,10 +1010,15 @@ function App() {
       setAudio(audioUrl);
       setLastGenerationTime(Math.round((Date.now() - startTime) / 1000));
       showNotification('success', t.speechGenerated);
+      
+      // Reload recent renders after successful synthesis
+      await loadRecentRenders();
+      
     } catch (error) {
       showNotification('error', `${t.error}: ${error.message}`);
     } finally {
       setLoading(false);
+      setIsCurrentlyRendering(false);  // Reset rendering state
     }
   };
 
@@ -881,6 +1083,24 @@ function App() {
     }
   };
 
+  const handlePlayRender = async (record) => {
+    try {
+      // Set current audio to the render file
+      const response = await fetch(`http://localhost:8000/render_file/${record.id}`);
+      if (!response.ok) throw new Error('Failed to load audio');
+      
+      const blob = await response.blob();
+      const audioUrl = URL.createObjectURL(blob);
+      setAudio(audioUrl);
+    } catch (error) {
+      showNotification('error', `Failed to play audio: ${error.message}`);
+    }
+  };
+
+  const handlePageChange = (page) => {
+    loadRecentRenders(page);
+  };
+
   const downloadAudio = () => {
     if (audio) {
       const a = document.createElement('a');
@@ -923,23 +1143,72 @@ function App() {
           </div>
         </header>
 
-        {/* Quality Presets */}
-        <section className="mb-8">
-          <h2 className="text-2xl font-bold text-black mb-6 flex items-center animate-slide-in-left">
-            <i className="fas fa-palette mr-3"></i>
-            {t.qualityPresets}
-          </h2>
-          <QualityPresets
-            onPresetSelect={handlePresetSelect}
-            currentSettings={settings}
-            t={t}
-          />
-        </section>
-
         {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column - Text Input & Controls */}
-          <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-8">
+          {/* Voice Profile Management - Central Position */}
+          <div className="max-w-4xl mx-auto">
+            <div className="card animate-fade-in-up">
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center justify-center">
+                <i className="fas fa-user-circle mr-3"></i>
+                {t.voiceSelection}
+              </h2>
+
+              {/* Default Voice Option */}
+              <div className="mb-4">
+                <button
+                  onClick={() => setSelectedProfile('')}
+                  className={`w-full p-4 rounded-lg border-2 transition-all duration-300 ${!selectedProfile
+                      ? 'border-green-400 bg-green-400/10'
+                      : 'border-white/20 hover:border-white/40'
+                    }`}
+                >
+                  <div className="flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-r from-green-400 to-blue-500 flex items-center justify-center mr-3">
+                      <i className="fas fa-star text-white"></i>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-white font-semibold">
+                        {!selectedProfile ? t.usingDefaultVoice : t.useDefaultVoice}
+                      </div>
+                      <div className="text-white/60 text-sm">{t.recommendedVoice}</div>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              {/* Profile List - Horizontal Layout with Scroll for 3+ Profiles */}
+              <div className={`${Object.keys(profiles).length > 3 ? 'max-h-64 overflow-y-auto' : ''} grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4`}>
+                {Object.entries(profiles).map(([profileId, profile]) => (
+                  <VoiceProfileCard
+                    key={profileId}
+                    profileId={profileId}
+                    profile={profile}
+                    isSelected={selectedProfile === profileId}
+                    onSelect={setSelectedProfile}
+                    onEdit={() => { }}
+                    onDelete={handleDeleteProfile}
+                    t={t}
+                  />
+                ))}
+              </div>
+
+              {/* Add Profile Button */}
+              <div className="text-center">
+                <button
+                  onClick={() => setShowAddProfile(true)}
+                  className="btn-outline px-8"
+                >
+                  <i className="fas fa-plus mr-2"></i>
+                  {t.addNewProfile}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Content Grid - Text Input and Monitoring */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Left Column - Text Input & Controls */}
+            <div className="lg:col-span-2 space-y-6">
             {/* Text Input */}
             <div className="card animate-fade-in-up">
               <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
@@ -952,23 +1221,37 @@ function App() {
                 onChange={(e) => setText(e.target.value)}
                 placeholder={t.textPlaceholder}
                 className="form-textarea h-40 mb-4"
-                maxLength={settings.context_length}
               />
 
               <div className="flex justify-between items-center text-white/60 text-sm mb-4">
                 <span>
                   {text.length.toLocaleString()} {t.characters}
-                  <span className="text-white/40 ml-1">
-                    (~{Math.ceil(text.length * 7.5).toLocaleString()} tokens)
-                  </span>
                 </span>
                 <span>
-                  {text.split(' ').filter(w => w.length > 0).length} {t.words} /
-                  <span className="text-white/40 ml-1">
-                    {settings.context_length.toLocaleString()} tokens max
+                  {text.split(' ').filter(w => w.length > 0).length} {t.words}
+                  <span className="text-green-400 ml-2">
+                    • Unlimited processing
                   </span>
                 </span>
               </div>
+
+              {/* Cleaned Text Preview */}
+              {text && cleanVietnameseText(text) !== text && (
+                <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-blue-400 text-sm font-medium flex items-center">
+                      <i className="fas fa-broom mr-2"></i>
+                      Văn bản đã làm sạch (sẽ được gửi đến TTS)
+                    </h4>
+                    <span className="text-blue-300 text-xs">
+                      {cleanVietnameseText(text).length} ký tự
+                    </span>
+                  </div>
+                  <div className="text-white/80 text-sm bg-black/20 p-2 rounded max-h-20 overflow-y-auto">
+                    {cleanVietnameseText(text) || <span className="text-red-400">Không có nội dung hợp lệ sau khi làm sạch</span>}
+                  </div>
+                </div>
+              )}
 
               {/* Example Texts */}
               <div className="mb-6">
@@ -1036,74 +1319,28 @@ function App() {
                 </button>
               </div>
             )}
-
-            {/* Advanced Controls */}
-            <AdvancedControls
-              settings={settings}
-              onChange={handleSettingChange}
-              isExpanded={showAdvanced}
-              onToggle={() => setShowAdvanced(!showAdvanced)}
-              t={t}
-            />
           </div>
 
-          {/* Right Column - Voice Profiles & Statistics */}
+          {/* Right Column - Monitoring & Statistics */}
           <div className="space-y-6">
-            {/* Default Voice Option */}
-            <div className="card animate-slide-in-right">
-              <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-                <i className="fas fa-user-circle mr-3"></i>
-                {t.voiceSelection}
-              </h2>
+            {/* GPU Status Monitor */}
+            <GPUMonitor t={t} />
 
-              <button
-                onClick={() => setSelectedProfile('')}
-                className={`w-full p-4 rounded-lg border-2 transition-all duration-300 mb-4 ${!selectedProfile
-                    ? 'border-green-400 bg-green-400/10'
-                    : 'border-white/20 hover:border-white/40'
-                  }`}
-              >
-                <div className="flex items-center">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-green-400 to-blue-500 flex items-center justify-center mr-3">
-                    <i className="fas fa-star text-white"></i>
-                  </div>
-                  <div className="text-left">
-                    <div className="text-white font-semibold">
-                      {!selectedProfile ? t.usingDefaultVoice : t.useDefaultVoice}
-                    </div>
-                    <div className="text-white/60 text-sm">{t.recommendedVoice}</div>
-                  </div>
-                </div>
-              </button>
+            {/* Render Status Monitor */}
+            <RenderStatusMonitor t={t} onEmergencyStop={handleEmergencyStop} />
 
-              {/* Profile List */}
-              <div className="space-y-3 max-h-64 overflow-y-auto">
-                {Object.entries(profiles).map(([profileId, profile]) => (
-                  <VoiceProfileCard
-                    key={profileId}
-                    profileId={profileId}
-                    profile={profile}
-                    isSelected={selectedProfile === profileId}
-                    onSelect={setSelectedProfile}
-                    onEdit={() => { }}
-                    onDelete={handleDeleteProfile}
-                    t={t}
-                  />
-                ))}
-              </div>
-
-              {/* Add Profile Button */}
-              <button
-                onClick={() => setShowAddProfile(true)}
-                className="btn-outline w-full mt-4"
-              >
-                <i className="fas fa-plus mr-2"></i>
-                {t.addNewProfile}
-              </button>
-            </div>
+            {/* Recent Renders History */}
+            <RecentRenders 
+              t={t} 
+              recentRenders={recentRenders}
+              loading={rendersLoading}
+              pagination={rendersPagination}
+              onPageChange={handlePageChange}
+              onPlayRender={handlePlayRender}
+            />
 
             {/* Enhanced Statistics */}
-            <div className="card animate-slide-in-right" style={{ animationDelay: '0.2s' }}>
+            <div className="card animate-slide-in-right" style={{ animationDelay: '0.4s' }}>
               <h3 className="text-lg font-bold text-white mb-4 flex items-center">
                 <i className="fas fa-chart-bar mr-3"></i>
                 {t.statistics}
@@ -1114,20 +1351,12 @@ function App() {
                   <span className="font-semibold">{Object.keys(profiles).length}</span>
                 </div>
                 <div className="flex justify-between text-white/80">
-                  <span>{t.qualityLevel}:</span>
-                  <span className="font-semibold">{getQualityLevel()}</span>
-                </div>
-                <div className="flex justify-between text-white/80">
-                  <span>{t.gpu}:</span>
-                  <span className="font-semibold">{Math.round(settings.gpu_offload * 100)}%</span>
+                  <span>Processing:</span>
+                  <span className="font-semibold text-green-400">Sentence-by-sentence</span>
                 </div>
                 <div className="flex justify-between text-white/80">
                   <span>{t.estimatedTime}:</span>
                   <span className="font-semibold">~{estimateProcessingTime()}s</span>
-                </div>
-                <div className="flex justify-between text-white/80">
-                  <span>{t.processingMode}:</span>
-                  <span className="font-semibold">{getProcessingMode()}</span>
                 </div>
                 {lastGenerationTime && (
                   <div className="flex justify-between text-green-400">
@@ -1228,6 +1457,7 @@ function App() {
             onClose={() => setNotification(null)}
           />
         )}
+        </div>
       </div>
     </div>
   );
