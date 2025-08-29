@@ -351,7 +351,7 @@ const VIETNAMESE_PRESETS = {
 ### 💬 **Kênh Hỗ Trợ**
 - **GitHub Issues**: Báo lỗi và đề xuất
 - **Discussions**: Thảo luận kỹ thuật
-- **Email**: [your-email@domain.com]
+- **Email**: [nguyenanhtuan161095@gmail.com]
 - **Discord**: [Premium Vietnamese TTS Community]
 
 ### 🌐 **Cộng Đồng**
