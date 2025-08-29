@@ -260,9 +260,10 @@ generated/
 # models/
 
 # Data files (except samples)
-data/*/
-!data/tina/
-!data/NSUT-Phu-Thang/
+!data/*/
+!data/*/*.wav
+# !data/tina/
+# !data/NSUT-Phu-Thang/
 
 # IDE files
 .vscode/
@@ -286,3 +287,6 @@ Thumbs.db
 
 # Profiling
 *.prof
+
+# DOING
+DOING

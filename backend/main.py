@@ -1,27 +1,36 @@
 #!/usr/bin/env python3
 """
-Premium Vietnamese Text-to-Speech API
-A production-ready FastAPI application for high-quality Vietnamese speech synthesis
-using ZipVoice technology with zero-shot voice cloning capabilities.
+Premium Vietnamese Text-to-Speech API - Version 2
+Simplified sentence-by-sentence processing with GPU monitoring and performance metrics.
+Using ZipVoice defaults for optimal Vietnamese speech synthesis.
 """
 
-import os
+import asyncio
+import datetime
 import json
+import os
+import re
 import shutil
 import subprocess
+import threading
+import time
 import uuid
-import datetime
-import re
-import tempfile
+from collections import deque
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
 
-import soundfile as sf
 import numpy as np
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
-from fastapi.responses import FileResponse
+import soundfile as sf
+from fastapi import (BackgroundTasks, FastAPI, File, Form, HTTPException,
+                     Request, Response, UploadFile)
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
+
+# Disable API access logging but keep error logging
+import logging
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+logging.getLogger("fastapi").setLevel(logging.WARNING)
 
 # === CONFIGURATION === #
 
@@ -31,31 +40,69 @@ ZIPVOICE_DIR = "/ZipVoice"
 MODEL_DIR = "/models/zipvoice_vi"
 CHECKPOINT_NAME = "iter-525000-avg-2.pt"
 DEFAULT_PROFILE = "tina"
+DOING_DIR = "/DOING"  # Temporary processing folder
+DATA_LOG_FILE = "/data/data.json"  # Lightweight DB for rendering history
 
-# Vietnamese TTS optimized parameters
-VIETNAMESE_DEFAULTS = {
-    "guidance_scale": 1.0,      # Quality control
-    "num_step": 16,             # Inference steps
-    "feat_scale": 0.1,          # Feature scaling
-    "target_rms": 0.1,          # Audio level
-    "speed": 1.0,               # Speech rate
-    "context_length": 65000,    # Token limit
-    "gpu_offload": 0.9          # GPU utilization
+# Use ZipVoice defaults only (no advanced settings)
+ZIPVOICE_DEFAULTS = {
+    "tokenizer": "espeak",
+    "lang": "vi",
+    "model_name": "zipvoice",
+    "model_dir": MODEL_DIR,
+    "checkpoint_name": CHECKPOINT_NAME
 }
+
+# GPU monitoring thresholds
+GPU_TEMP_EMERGENCY = 90  # Stop processing at 90°C
+GPU_TEMP_THROTTLE = 85   # Reduce load at 85°C
+TARGET_GPU_UTILIZATION = 85  # Target 85% utilization
+
+# Performance metrics storage
+class RenderMetrics:
+    def __init__(self):
+        self.recent_renders = deque(maxlen=1000)  # Last 1000 renders
+        self.lock = threading.Lock()
+    
+    def add_render(self, word_count: int, render_time: float):
+        with self.lock:
+            self.recent_renders.append({
+                'words': word_count,
+                'time': render_time,
+                'timestamp': datetime.datetime.now().isoformat()
+            })
+    
+    def estimate_time(self, word_count: int) -> float:
+        with self.lock:
+            if not self.recent_renders:
+                return word_count * 0.5  # Fallback estimate
+            
+            avg_time_per_word = sum(r['time']/max(r['words'], 1) for r in self.recent_renders) / len(self.recent_renders)
+            return word_count * avg_time_per_word
+    
+    def get_stats(self) -> Dict[str, Any]:
+        with self.lock:
+            if not self.recent_renders:
+                return {"total_renders": 0, "avg_time_per_word": 0.5}
+            
+            total_renders = len(self.recent_renders)
+            avg_time_per_word = sum(r['time']/max(r['words'], 1) for r in self.recent_renders) / total_renders
+            
+            return {
+                "total_renders": total_renders,
+                "avg_time_per_word": avg_time_per_word,
+                "last_render": self.recent_renders[-1] if self.recent_renders else None
+            }
+
+# Global instances
+render_metrics = RenderMetrics()
+current_process = None  # Track current rendering process for stop functionality
 
 # === PYDANTIC MODELS === #
 
 class SynthesisRequest(BaseModel):
-    """Request model for speech synthesis"""
+    """Simplified request model for version 2 - only text and profile"""
     text: str
     profile_id: Optional[str] = None
-    speed: float = VIETNAMESE_DEFAULTS["speed"]
-    guidance_scale: float = VIETNAMESE_DEFAULTS["guidance_scale"]
-    num_step: int = VIETNAMESE_DEFAULTS["num_step"]
-    feat_scale: float = VIETNAMESE_DEFAULTS["feat_scale"]
-    target_rms: float = VIETNAMESE_DEFAULTS["target_rms"]
-    context_length: int = VIETNAMESE_DEFAULTS["context_length"]
-    gpu_offload: float = VIETNAMESE_DEFAULTS["gpu_offload"]
 
 class ProfileResponse(BaseModel):
     """Response model for profile information"""
@@ -65,12 +112,111 @@ class ProfileResponse(BaseModel):
     is_default: bool
     created_at: str
 
+class GPUStatus(BaseModel):
+    """GPU status response model"""
+    temperature: float
+    utilization: float
+    memory_used: float
+    memory_total: float
+    status: str  # "NORMAL", "THROTTLE", "EMERGENCY"
+
+class RenderStatus(BaseModel):
+    """Current rendering status"""
+    is_rendering: bool
+    current_sentence: int
+    total_sentences: int
+    estimated_time_remaining: float
+    elapsed_time: float
+
+# === GPU MONITORING FUNCTIONS === #
+
+def get_gpu_status() -> GPUStatus:
+    """Get current GPU temperature, utilization and memory status"""
+    try:
+        # Try to get GPU info using nvidia-ml-py
+        result = subprocess.run(['nvidia-smi', '--query-gpu=temperature.gpu,utilization.gpu,memory.used,memory.total', '--format=csv,noheader,nounits'], 
+                              capture_output=True, text=True, timeout=5)
+        
+        if result.returncode == 0:
+            temp, util, mem_used, mem_total = result.stdout.strip().split(', ')
+            temp = float(temp)
+            util = float(util)
+            mem_used = float(mem_used)
+            mem_total = float(mem_total)
+            
+            # Determine status based on temperature
+            if temp >= GPU_TEMP_EMERGENCY:
+                status = "EMERGENCY"
+            elif temp >= GPU_TEMP_THROTTLE:
+                status = "THROTTLE"
+            else:
+                status = "NORMAL"
+            
+            return GPUStatus(
+                temperature=temp,
+                utilization=util,
+                memory_used=mem_used,
+                memory_total=mem_total,
+                status=status
+            )
+    except Exception as e:
+        print(f"[WARN] Could not get GPU status: {e}")
+    
+    # Fallback for systems without GPU or nvidia-smi
+    return GPUStatus(
+        temperature=0.0,
+        utilization=0.0,
+        memory_used=0.0,
+        memory_total=0.0,
+        status="UNKNOWN"
+    )
+
+def should_stop_processing() -> bool:
+    """Check if processing should be stopped due to high GPU temperature"""
+    gpu_status = get_gpu_status()
+    return gpu_status.status == "EMERGENCY"
+
+def should_throttle_processing() -> bool:
+    """Check if processing should be throttled due to elevated GPU temperature"""
+    gpu_status = get_gpu_status()
+    return gpu_status.status in ["THROTTLE", "EMERGENCY"]
+
+# === STOP MECHANISM === #
+
+class ProcessController:
+    def __init__(self):
+        self.should_stop = False
+        self.current_process = None
+        self.lock = threading.Lock()
+    
+    def stop_current_process(self):
+        with self.lock:
+            self.should_stop = True
+            if self.current_process:
+                try:
+                    self.current_process.terminate()
+                    print("[INFO] Terminated current rendering process")
+                except Exception as e:
+                    print(f"[WARN] Could not terminate process: {e}")
+    
+    def reset(self):
+        with self.lock:
+            self.should_stop = False
+            self.current_process = None
+    
+    def is_stopped(self) -> bool:
+        with self.lock:
+            return self.should_stop
+
+# Global process controller
+process_controller = ProcessController()
+
 # === FASTAPI APP SETUP === #
 
 app = FastAPI(
-    title="Premium Vietnamese Text-to-Speech API",
-    description="High-quality Vietnamese speech synthesis with voice cloning",
-    version="1.0.0",
+    title="Premium Vietnamese TTS API - Version 2",
+    description="Simplified Vietnamese speech synthesis with sentence-based processing and GPU monitoring",
+    version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -84,6 +230,102 @@ app.add_middleware(
 )
 
 # === UTILITY FUNCTIONS === #
+
+def load_data_log() -> List[Dict[str, Any]]:
+    """Load rendering history from lightweight JSON database"""
+    try:
+        if os.path.exists(DATA_LOG_FILE):
+            with open(DATA_LOG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, list) else []
+    except (json.JSONDecodeError, IOError) as e:
+        print(f"[WARN] Failed to load data log: {e}")
+    return []
+
+def save_data_log(data: List[Dict[str, Any]]) -> None:
+    """Save rendering history to lightweight JSON database"""
+    try:
+        # Ensure data directory exists
+        os.makedirs(os.path.dirname(DATA_LOG_FILE), exist_ok=True)
+        with open(DATA_LOG_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except IOError as e:
+        print(f"[WARN] Failed to save data log: {e}")
+
+def add_render_record(text: str, profile_id: str, audio_path: str, word_count: int, processing_time: float) -> None:
+    """Add a new render record to the data log with automatic cleanup of old records"""
+    try:
+        data_log = load_data_log()
+        
+        # Create new record
+        record = {
+            "id": datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3],  # Unique ID with milliseconds
+            "timestamp": datetime.datetime.now().isoformat(),
+            "text": text[:200] + "..." if len(text) > 200 else text,  # Truncate long text for storage
+            "full_text_preview": text[:50] + "..." if len(text) > 50 else text,  # Short preview
+            "profile_id": profile_id,
+            "audio_path": audio_path,
+            "word_count": word_count,
+            "processing_time": processing_time,
+            "file_size": os.path.getsize(audio_path) if os.path.exists(audio_path) else 0
+        }
+        
+        # Add to beginning of list (most recent first)
+        data_log.insert(0, record)
+        
+        # Clean up old records (keep only last 8 hours)
+        cutoff_time = datetime.datetime.now() - datetime.timedelta(hours=8)
+        data_log = [
+            record for record in data_log 
+            if datetime.datetime.fromisoformat(record["timestamp"]) > cutoff_time
+        ]
+        
+        # Limit to maximum 100 records even within 8 hours
+        data_log = data_log[:100]
+        
+        save_data_log(data_log)
+        print(f"[LOG] Added render record: {record['id']} ({word_count} words, {processing_time:.1f}s)")
+        
+    except Exception as e:
+        print(f"[WARN] Failed to add render record: {e}")
+
+def get_recent_renders(page: int = 1, per_page: int = 10) -> Dict[str, Any]:
+    """Get paginated list of recent renders from last 8 hours"""
+    try:
+        data_log = load_data_log()
+        
+        # Calculate pagination
+        total_records = len(data_log)
+        total_pages = max(1, (total_records + per_page - 1) // per_page)
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        
+        page_records = data_log[start_idx:end_idx]
+        
+        return {
+            "records": page_records,
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total_records": total_records,
+                "total_pages": total_pages,
+                "has_next": page < total_pages,
+                "has_prev": page > 1
+            }
+        }
+    except Exception as e:
+        print(f"[ERROR] Failed to get recent renders: {e}")
+        return {
+            "records": [],
+            "pagination": {
+                "page": 1,
+                "per_page": per_page,
+                "total_records": 0,
+                "total_pages": 1,
+                "has_next": False,
+                "has_prev": False
+            }
+        }
 
 def load_profiles() -> Dict[str, Any]:
     """Load voice profile metadata from JSON storage"""
@@ -107,37 +349,106 @@ def save_profiles(profiles: Dict[str, Any]) -> None:
         print(f"[ERROR] Failed to save profiles: {e}")
         raise HTTPException(500, f"Failed to save profile metadata: {str(e)}")
 
-def run_command(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
-    """Execute system command with proper error handling and logging"""
+def run_command_with_monitoring(cmd: List[str], timeout: int = 300, **kwargs) -> subprocess.CompletedProcess:
+    """Execute system command with GPU monitoring and timeout - increased timeout for longer texts"""
     print(f"[CMD] {' '.join(cmd)}")
     
     try:
-        result = subprocess.run(
+        # Start the process
+        process = subprocess.Popen(
             cmd, 
-            capture_output=True, 
-            text=True, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE,
+            text=True,
             encoding='utf-8',
             **kwargs
         )
         
-        if result.stdout:
-            print(f"[STDOUT] {result.stdout}")
-        if result.stderr:
-            print(f"[STDERR] {result.stderr}")
+        # Store process reference for potential termination
+        with process_controller.lock:
+            process_controller.current_process = process
+        
+        start_time = time.time()
+        
+        # Monitor process with GPU checks
+        while True:
+            # Check if process finished
+            if process.poll() is not None:
+                break
             
-        if result.returncode != 0:
+            # Check for stop signal
+            if process_controller.is_stopped():
+                print("[STOP] Terminating process due to user stop request")
+                process.terminate()
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    print("[FORCE] Force killing process")
+                    process.kill()
+                    process.wait()
+                raise Exception("Process stopped by user request")
+            
+            # Check GPU temperature
+            if should_stop_processing():
+                print("[OVERHEAT] Terminating process due to high GPU temperature")
+                process.terminate()
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+                raise Exception("Process stopped due to high GPU temperature (>90°C)")
+            
+            # Check timeout - increased for longer texts
+            if time.time() - start_time > timeout:
+                print(f"[TIMEOUT] Process exceeded {timeout} seconds")
+                process.terminate()
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+                raise Exception(f"Process timeout after {timeout} seconds")
+            
+            # Brief sleep to avoid excessive polling
+            time.sleep(2)
+        
+        # Get final output
+        stdout, stderr = process.communicate()
+        
+        if stdout:
+            print(f"[STDOUT] {stdout}")
+        if stderr:
+            print(f"[STDERR] {stderr}")
+            
+        if process.returncode != 0:
+            error_details = f"Return code: {process.returncode}"
+            if stderr:
+                error_details += f"\nStderr: {stderr}"
+            if stdout:
+                error_details += f"\nStdout: {stdout}"
+            print(f"[PROCESS_ERROR] {error_details}")
             raise subprocess.CalledProcessError(
-                result.returncode, cmd, result.stdout, result.stderr
+                process.returncode, cmd, stdout, stderr
             )
         
+        # Create result object
+        result = subprocess.CompletedProcess(cmd, process.returncode, stdout, stderr)
         return result
         
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+    except Exception as e:
         error_msg = f"Command execution failed: {' '.join(cmd)}"
         if hasattr(e, 'stderr') and e.stderr:
-            error_msg += f"\nError: {e.stderr}"
+            error_msg += f"\nStderr: {e.stderr}"
+        if hasattr(e, 'stdout') and e.stdout:
+            error_msg += f"\nStdout: {e.stdout}"
         print(f"[ERROR] {error_msg}")
         raise Exception(error_msg)
+    
+    finally:
+        # Clean up process reference
+        with process_controller.lock:
+            process_controller.current_process = None
 
 def ensure_prompt_wav(sample_path: str, out_dir: str) -> str:
     """Convert audio sample to 24kHz mono format for Vietnamese TTS compatibility"""
@@ -155,7 +466,7 @@ def ensure_prompt_wav(sample_path: str, out_dir: str) -> str:
         prompt_wav
     ]
     
-    run_command(cmd)
+    run_command_with_monitoring(cmd)
     
     # Verify output file was created
     if not os.path.exists(prompt_wav):
@@ -182,7 +493,7 @@ def clean_vietnamese_text(text: str) -> str:
     return text
 
 def split_vietnamese_sentences(text: str) -> List[str]:
-    """Split Vietnamese text into sentences for optimal prosody"""
+    """Split Vietnamese text into sentences for optimal processing (based on refer/simple-index.py)"""
     if not text:
         return []
     
@@ -197,10 +508,67 @@ def split_vietnamese_sentences(text: str) -> List[str]:
         # Add period to last sentence if missing
         parts[-1] += '.'
     
-    return parts
+    # Filter out sentences that are too short or only punctuation (fixes conv1d kernel error)
+    filtered_parts = []
+    for part in parts:
+        # Remove sentences that are just punctuation or have less than 3 characters of actual text
+        text_only = re.sub(r'[.!?…\s]', '', part)
+        if len(text_only) >= 3:  # Minimum 3 characters for vocoder to work
+            filtered_parts.append(part)
+        else:
+            print(f"[SKIP] Sentence too short for TTS: '{part}'")
+    
+    # If all sentences were filtered out, keep at least one meaningful sentence
+    if not filtered_parts and parts:
+        # Find the longest sentence or add a default
+        longest = max(parts, key=lambda x: len(re.sub(r'[.!?…\s]', '', x)))
+        if len(re.sub(r'[.!?…\s]', '', longest)) > 0:
+            filtered_parts = [longest]
+        else:
+            filtered_parts = ["Xin chào."]  # Default Vietnamese phrase
+    
+    print(f"[INFO] Split into {len(filtered_parts)} sentences for processing")
+    return filtered_parts
+
+def create_doing_directory() -> str:
+    """Create timestamped directory in DOING folder for processing"""
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    doing_dir = f"{DOING_DIR}/{timestamp}"
+    os.makedirs(doing_dir, exist_ok=True)
+    print(f"[INFO] Created processing directory: {doing_dir}")
+    return doing_dir
+
+def cleanup_old_doing_folders():
+    """Clean up DOING folders older than 8 hours to prevent memory overflow"""
+    if not os.path.exists(DOING_DIR):
+        return
+    
+    # Calculate cutoff date (8 hours ago)
+    cutoff_date = datetime.datetime.now() - datetime.timedelta(hours=8)
+    
+    try:
+        for item in os.listdir(DOING_DIR):
+            item_path = os.path.join(DOING_DIR, item)
+            
+            if os.path.isdir(item_path):
+                try:
+                    # Parse timestamp from folder name (format: YYYY-MM-DD_HH-MM-SS)
+                    folder_time = datetime.datetime.strptime(item, "%Y-%m-%d_%H-%M-%S")
+                    
+                    # Delete if older than cutoff
+                    if folder_time < cutoff_date:
+                        shutil.rmtree(item_path, ignore_errors=True)
+                        print(f"[INFO] Cleaned up old processing folder: {item_path}")
+                        
+                except ValueError:
+                    # Skip folders with invalid timestamp format
+                    continue
+                    
+    except Exception as e:
+        print(f"[WARN] Failed to cleanup old DOING folders: {e}")
 
 def build_vietnamese_tsv(out_dir: str, prompt_text: str, prompt_wav: str, sentences: List[str]) -> str:
-    """Generate TSV file for ZipVoice batch processing with proper Vietnamese formatting"""
+    """Generate TSV file for ZipVoice batch processing (based on refer/simple-index.py)"""
     tsv_path = f"{out_dir}/vietnamese_test.tsv"
     
     try:
@@ -211,7 +579,7 @@ def build_vietnamese_tsv(out_dir: str, prompt_text: str, prompt_wav: str, senten
                 if not clean_sentence:
                     continue
                 
-                segment_name = f"vn_seg_{i:03d}"
+                segment_name = f"seg_{i:03d}"
                 
                 # Format: name<TAB>prompt_text<TAB>prompt_wav<TAB>target_text
                 tsv_line = "\t".join([
@@ -247,8 +615,8 @@ def build_vietnamese_tsv(out_dir: str, prompt_text: str, prompt_wav: str, senten
     except (IOError, UnicodeError) as e:
         raise Exception(f"Failed to create TSV file: {str(e)}")
 
-def vietnamese_inference(out_dir: str, tsv_path: str, gpu_offload: float = 0.9) -> None:
-    """Execute Vietnamese TTS inference using ZipVoice with Vietnamese-trained model"""
+def vietnamese_sentence_inference(out_dir: str, tsv_path: str, total_sentences: int = 0) -> None:
+    """Execute Vietnamese TTS inference using ZipVoice defaults (no advanced parameters)"""
     
     # Validate inputs
     if not os.path.exists(tsv_path):
@@ -261,31 +629,49 @@ def vietnamese_inference(out_dir: str, tsv_path: str, gpu_offload: float = 0.9) 
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Vietnamese checkpoint not found: {checkpoint_path}")
     
+    # Read sentences from TSV for display
+    sentences_to_process = []
+    try:
+        with open(tsv_path, "r", encoding="utf-8") as f:
+            for line in f:
+                columns = line.strip().split("\t")
+                if len(columns) >= 4:
+                    sentences_to_process.append((columns[0], columns[3]))  # (segment_name, sentence)
+    except Exception as e:
+        print(f"[WARN] Could not read sentences from TSV for display: {e}")
+    
     # Set up environment for Vietnamese processing
     env = os.environ.copy()
     env.update({
-        "CUDA_MEMORY_FRACTION": str(gpu_offload),
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
         "PYTHONIOENCODING": "utf-8"
     })
     
-    # Construct ZipVoice command with Vietnamese model parameters
+    # Construct ZipVoice command with ONLY default parameters (no advanced settings)
     cmd = [
         "python3", "-m", "zipvoice.bin.infer_zipvoice",
-        "--model-name", "zipvoice",
-        "--model-dir", MODEL_DIR,          # CRITICAL: Vietnamese model directory
-        "--checkpoint-name", CHECKPOINT_NAME,  # CRITICAL: Vietnamese checkpoint
-        "--tokenizer", "espeak",           # CRITICAL: eSpeak for Vietnamese phonemes
-        "--lang", "vi",                    # CRITICAL: Vietnamese language code
-        "--test-list", tsv_path,           # Input TSV file
-        "--res-dir", out_dir               # Output directory
+        "--model-name", ZIPVOICE_DEFAULTS["model_name"],
+        "--model-dir", ZIPVOICE_DEFAULTS["model_dir"],
+        "--checkpoint-name", ZIPVOICE_DEFAULTS["checkpoint_name"],
+        "--tokenizer", ZIPVOICE_DEFAULTS["tokenizer"],
+        "--lang", ZIPVOICE_DEFAULTS["lang"],
+        "--test-list", tsv_path,
+        "--res-dir", out_dir
     ]
     
-    print(f"[INFO] Starting Vietnamese TTS inference with model: {checkpoint_path}")
+    # Log each sentence being processed
+    for i, (segment_name, sentence) in enumerate(sentences_to_process, 1):
+        print(f"[SENTENCE] Processing {i}/{len(sentences_to_process)}: {sentence[:50]}{'...' if len(sentence) > 50 else ''}")
+    
+    print(f"[INFO] Starting Vietnamese TTS inference with ZipVoice defaults")
     
     try:
-        run_command(cmd, cwd=ZIPVOICE_DIR, env=env, timeout=300)
+        # Use monitoring version with longer timeout for sentence processing
+        # Calculate timeout based on number of sentences (30 seconds per sentence minimum)
+        sentence_timeout = max(300, len(sentences_to_process) * 30)
+        print(f"[INFO] Setting timeout to {sentence_timeout} seconds for {len(sentences_to_process)} sentences")
+        run_command_with_monitoring(cmd, timeout=sentence_timeout, cwd=ZIPVOICE_DIR, env=env)
         print(f"[SUCCESS] Vietnamese TTS inference completed successfully")
         
     except Exception as e:
@@ -297,29 +683,30 @@ def merge_vietnamese_segments(out_dir: str) -> str:
     """Merge generated audio segments into final Vietnamese speech output"""
     
     # Find all generated segment files
-    segment_pattern = "vn_seg_*.wav"
+    segment_pattern = "seg_*.wav"
     wav_files = sorted(Path(out_dir).glob(segment_pattern))
-    
-    if not wav_files:
-        # Fallback to generic pattern
-        wav_files = sorted(Path(out_dir).glob("seg_*.wav"))
     
     if not wav_files:
         raise Exception(f"No audio segments found in {out_dir}")
     
-    print(f"[INFO] Merging {len(wav_files)} Vietnamese audio segments")
+    print(f"[INFO] Merging {len(wav_files)} Vietnamese audio segments with natural pauses")
     
-    # Process and concatenate segments
+    # Process and concatenate segments with pauses
     sample_rate = None
     audio_chunks = []
+    pause_duration = 0.5  # 500ms pause between sentences for natural speech flow
     
-    for wav_file in wav_files:
+    for i, wav_file in enumerate(wav_files):
         try:
             audio_data, sr = sf.read(str(wav_file))
             
             # Validate sample rate consistency
             if sample_rate is None:
                 sample_rate = sr
+                # Create pause silence array once we know the sample rate
+                pause_samples = int(pause_duration * sample_rate)
+                pause_silence = np.zeros(pause_samples, dtype=audio_data.dtype)
+                print(f"[INFO] Adding {pause_duration}s pauses between sentences ({pause_samples} samples at {sample_rate}Hz)")
             elif sr != sample_rate:
                 raise Exception(f"Sample rate mismatch: {wav_file} has {sr}Hz, expected {sample_rate}Hz")
             
@@ -332,7 +719,13 @@ def merge_vietnamese_segments(out_dir: str) -> str:
                 print(f"[WARN] Empty audio segment: {wav_file}")
                 continue
             
+            # Add the audio segment
             audio_chunks.append(audio_data)
+            
+            # Add pause after each segment except the last one
+            if i < len(wav_files) - 1:
+                audio_chunks.append(pause_silence.copy())
+                print(f"[PAUSE] Added {pause_duration}s pause after segment {i+1}/{len(wav_files)}")
             
         except Exception as e:
             print(f"[WARN] Failed to process segment {wav_file}: {e}")
@@ -341,7 +734,7 @@ def merge_vietnamese_segments(out_dir: str) -> str:
     if not audio_chunks:
         raise Exception("No valid audio segments to merge")
     
-    # Concatenate all segments
+    # Concatenate all segments with pauses
     final_audio = np.concatenate(audio_chunks)
     
     # Normalize audio level
@@ -358,25 +751,104 @@ def merge_vietnamese_segments(out_dir: str) -> str:
     if not os.path.exists(final_path) or os.path.getsize(final_path) == 0:
         raise Exception("Failed to create final audio file")
     
-    print(f"[SUCCESS] Created final Vietnamese audio: {final_path} ({len(audio_chunks)} segments)")
+    # Calculate total duration for logging
+    total_duration = len(final_audio) / sample_rate
+    audio_duration = total_duration - (len(wav_files) - 1) * pause_duration
+    pause_duration_total = (len(wav_files) - 1) * pause_duration
+    
+    print(f"[SUCCESS] Created final Vietnamese audio: {final_path} ({len(wav_files)} segments)")
+    print(f"[INFO] Total duration: {total_duration:.2f}s (audio: {audio_duration:.2f}s, pauses: {pause_duration_total:.2f}s)")
     return final_path
 
 # === API ENDPOINTS === #
 
 @app.get("/", summary="API Health Check")
 def root():
-    """API health check and information endpoint"""
+    """API health check and information endpoint for version 2"""
     return {
-        "message": "Premium Vietnamese TTS API",
-        "version": "1.0.0",
+        "message": "Premium Vietnamese TTS API - Version 2",
+        "version": "2.0.0",
         "status": "active",
         "features": [
-            "Vietnamese language optimization",
-            "Zero-shot voice cloning", 
-            "High-quality audio synthesis",
-            "Custom voice profiles"
+            "Sentence-by-sentence processing",
+            "GPU temperature monitoring",
+            "Performance metrics tracking",
+            "Emergency stop functionality",
+            "ZipVoice defaults only (no advanced settings)"
         ]
     }
+
+@app.get("/gpu_status", response_model=GPUStatus, summary="Get GPU Status")
+def get_gpu_status_endpoint():
+    """Get current GPU temperature, utilization and memory status"""
+    return get_gpu_status()
+
+@app.get("/render_status", response_model=RenderStatus, summary="Get Render Status")
+def get_render_status():
+    """Get current rendering status for progress tracking"""
+    # This would be updated during actual rendering
+    return RenderStatus(
+        is_rendering=process_controller.current_process is not None,
+        current_sentence=0,
+        total_sentences=0,
+        estimated_time_remaining=0.0,
+        elapsed_time=0.0
+    )
+
+@app.post("/stop_render", summary="Stop Current Rendering")
+def stop_render():
+    """Emergency stop for current rendering process"""
+    process_controller.stop_current_process()
+    return {"message": "Rendering process stopped", "success": True}
+
+@app.get("/performance_metrics", summary="Get Performance Metrics")
+def get_performance_metrics():
+    """Get rendering performance statistics"""
+    stats = render_metrics.get_stats()
+    return {
+        "message": "Performance metrics",
+        "data": stats
+    }
+
+@app.get("/recent_renders", summary="Get Recent Render History")
+def get_recent_renders_endpoint(page: int = 1, per_page: int = 10):
+    """Get paginated list of recent renders from last 8 hours"""
+    try:
+        result = get_recent_renders(page, per_page)
+        return {
+            "message": "Recent render history",
+            "data": result["records"],
+            "pagination": result["pagination"]
+        }
+    except Exception as e:
+        print(f"[ERROR] Failed to get recent renders: {e}")
+        raise HTTPException(500, "Failed to retrieve render history")
+
+@app.get("/render_file/{record_id}", summary="Download Render Audio File")
+def download_render_file(record_id: str):
+    """Download audio file from a specific render record"""
+    try:
+        data_log = load_data_log()
+        record = next((r for r in data_log if r["id"] == record_id), None)
+        
+        if not record:
+            raise HTTPException(404, f"Render record '{record_id}' not found")
+        
+        audio_path = record["audio_path"]
+        if not os.path.exists(audio_path):
+            raise HTTPException(404, f"Audio file not found: {audio_path}")
+        
+        return FileResponse(
+            audio_path,
+            media_type="audio/wav",
+            filename=f"render_{record_id}.wav"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to download render file: {e}")
+        raise HTTPException(500, "Failed to download audio file")
 
 @app.get("/profiles", response_model=Dict[str, ProfileResponse], summary="List Voice Profiles")
 def get_profiles():
@@ -446,7 +918,7 @@ def create_profile(
         
         save_profiles(profiles)
         
-        print(f"[SUCCESS] Created voice profile '{name}' at {profile_dir}")
+        print(f"[INFO] Created voice profile '{name}' at {profile_dir}")  # Only INFO log for profile creation
         return {
             "message": f"Voice profile '{name}' created successfully",
             "profile_id": name,
@@ -495,27 +967,24 @@ def delete_profile(profile_id: str):
         print(f"[ERROR] {error_msg}")
         raise HTTPException(500, error_msg)
 
-@app.post("/synthesize_speech", summary="Generate Vietnamese Speech")
-def synthesize_speech(
+@app.post("/synthesize_speech", summary="Generate Vietnamese Speech - Version 2")
+def synthesize_speech_v2(
     profile_id: Optional[str] = Form(None, description="Voice profile ID (optional, uses default if not provided)"),
-    text: str = Form(..., description="Vietnamese text to synthesize"),
-    speed: float = Form(VIETNAMESE_DEFAULTS["speed"], ge=0.1, le=3.0, description="Speech speed multiplier"),
-    guidance_scale: float = Form(VIETNAMESE_DEFAULTS["guidance_scale"], ge=0.1, le=3.0, description="Generation guidance scale"),
-    num_step: int = Form(VIETNAMESE_DEFAULTS["num_step"], ge=4, le=50, description="Number of inference steps"),
-    feat_scale: float = Form(VIETNAMESE_DEFAULTS["feat_scale"], ge=0.01, le=1.0, description="Feature scaling factor"),
-    target_rms: float = Form(VIETNAMESE_DEFAULTS["target_rms"], ge=0.01, le=1.0, description="Target audio RMS level"),
-    context_length: int = Form(VIETNAMESE_DEFAULTS["context_length"], ge=100, le=130000, description="Maximum context length in tokens"),
-    gpu_offload: float = Form(VIETNAMESE_DEFAULTS["gpu_offload"], ge=0.1, le=1.0, description="GPU memory utilization (0.1-1.0)")
+    text: str = Form(..., description="Vietnamese text to synthesize (unlimited length)")
 ):
     """
-    Generate high-quality Vietnamese speech from text using ZipVoice technology.
+    Generate high-quality Vietnamese speech using sentence-by-sentence processing.
     
-    This endpoint supports:
-    - Zero-shot voice cloning with custom profiles
-    - Vietnamese language optimization with eSpeak tokenizer
-    - Advanced parameter control for quality tuning
-    - Automatic text preprocessing and sentence splitting
+    Version 2 features:
+    - Sentence-by-sentence processing (no length limits)
+    - GPU temperature monitoring and throttling
+    - Performance metrics tracking
+    - Emergency stop capability
+    - ZipVoice defaults only (no advanced settings)
     """
+    
+    # Reset process controller for new render
+    process_controller.reset()
     
     # Use default profile if none specified
     active_profile = profile_id or DEFAULT_PROFILE
@@ -529,11 +998,9 @@ def synthesize_speech(
     if not vietnamese_text:
         raise HTTPException(400, "No valid Vietnamese text provided")
     
-    # Enforce context length limits
+    # Count words for performance metrics
     words = vietnamese_text.split()
-    if len(words) > context_length:
-        print(f"[WARN] Text truncated from {len(words)} to {context_length} words")
-        vietnamese_text = " ".join(words[:context_length])
+    word_count = len(words)
     
     # Validate profile exists
     profiles = load_profiles()
@@ -550,19 +1017,17 @@ def synthesize_speech(
     if not sample_txt_path.exists() or not sample_wav_path.exists():
         raise HTTPException(400, f"Profile '{active_profile}' is missing required files")
     
-    # Create unique temporary directory
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    unique_id = uuid.uuid4().hex[:8]
-    temp_dir = f"/tmp/vietnamese_tts_{timestamp}_{unique_id}"
+    # Create timestamped directory in DOING folder
+    doing_dir = create_doing_directory()
+    
+    # Clean up old processing folders (older than 2 days)
+    cleanup_old_doing_folders()
+    
+    start_time = time.time()
     
     try:
-        os.makedirs(temp_dir, exist_ok=True)
-        
-        print(f"=== Premium Vietnamese TTS Synthesis ===")
-        print(f"[INFO] Profile: {active_profile}")
-        print(f"[INFO] Text: '{vietnamese_text}' ({len(vietnamese_text)} chars, {len(words)} words)")
-        print(f"[INFO] Quality: guidance_scale={guidance_scale}, num_step={num_step}")
-        print(f"[INFO] Temp directory: {temp_dir}")
+        # Version 2 synthesis started
+        print(f"[INFO] Profile: {active_profile}, Text: {word_count} words")  # Single INFO log for synthesis
         
         # Step 1: Read prompt text
         with open(sample_txt_path, "r", encoding="utf-8") as f:
@@ -572,23 +1037,33 @@ def synthesize_speech(
             raise HTTPException(400, f"Profile '{active_profile}' has empty sample text")
         
         # Step 2: Convert sample audio to 24kHz mono
-        prompt_wav_24k = ensure_prompt_wav(str(sample_wav_path), temp_dir)
+        prompt_wav_24k = ensure_prompt_wav(str(sample_wav_path), doing_dir)
         
-        # Step 3: Split Vietnamese text into sentences
+        # Step 3: Split Vietnamese text into sentences for processing
         sentences = split_vietnamese_sentences(vietnamese_text)
         if not sentences:
             raise HTTPException(400, "Unable to process Vietnamese text into sentences")
         
-        print(f"[INFO] Split into {len(sentences)} Vietnamese sentences")
+        # Split into sentences
+        print(f"[INFO] Processing {len(sentences)} Vietnamese sentences")
         
         # Step 4: Create TSV file for batch processing
-        tsv_path = build_vietnamese_tsv(temp_dir, prompt_text, prompt_wav_24k, sentences)
+        tsv_path = build_vietnamese_tsv(doing_dir, prompt_text, prompt_wav_24k, sentences)
         
-        # Step 5: Run Vietnamese TTS inference
-        vietnamese_inference(temp_dir, tsv_path, gpu_offload)
+        # Step 5: Run Vietnamese TTS inference with monitoring and sentence display
+        vietnamese_sentence_inference(doing_dir, tsv_path, len(sentences))
+        
+        # Check if process was stopped
+        if process_controller.is_stopped():
+            raise HTTPException(409, "Rendering was stopped by user")
         
         # Step 6: Merge audio segments
-        final_audio_path = merge_vietnamese_segments(temp_dir)
+        final_audio_path = merge_vietnamese_segments(doing_dir)
+        
+        # Step 7: Copy final result to the processing directory for preservation
+        preserved_result = f"{doing_dir}/final_result.wav"
+        shutil.copy2(final_audio_path, preserved_result)
+        print(f"[MERGE] Final audio preserved at: {preserved_result}")
         
         # Verify final output
         if not os.path.exists(final_audio_path):
@@ -602,11 +1077,22 @@ def synthesize_speech(
         except Exception as e:
             raise HTTPException(500, f"Generated audio file is corrupted: {str(e)}")
         
-        print(f"[SUCCESS] Vietnamese TTS synthesis completed successfully!")
-        print(f"[RESULT] Audio: {final_audio_path} ({len(audio_data)} samples, {sample_rate}Hz)")
+        # Record performance metrics
+        render_time = time.time() - start_time
+        render_metrics.add_render(word_count, render_time)
+        
+        # Add render record to data log for history tracking
+        add_render_record(
+            text=vietnamese_text,
+            profile_id=active_profile,
+            audio_path=preserved_result,  # Use the preserved path
+            word_count=word_count,
+            processing_time=render_time
+        )
         
         # Return audio file
-        filename = f"vietnamese_speech_{active_profile}_{timestamp}.wav"
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"vietnamese_speech_v2_{active_profile}_{timestamp}.wav"
         return FileResponse(
             final_audio_path,
             media_type="audio/wav",
@@ -615,7 +1101,10 @@ def synthesize_speech(
                 "Content-Disposition": f"attachment; filename={filename}",
                 "X-Profile-Used": active_profile,
                 "X-Synthesis-Time": timestamp,
-                "X-Audio-Duration": f"{len(audio_data) / sample_rate:.2f}s"
+                "X-Audio-Duration": f"{len(audio_data) / sample_rate:.2f}s",
+                "X-Render-Time": f"{render_time:.2f}s",
+                "X-Word-Count": str(word_count),
+                "X-Performance": f"{render_time/word_count:.2f}s/word"
             }
         )
         
@@ -629,360 +1118,25 @@ def synthesize_speech(
         raise HTTPException(500, error_msg)
     
     finally:
-        # Note: Temporary files are not immediately deleted as FileResponse needs them
-        # They will be cleaned up by the system's temp directory cleanup
-        pass
+        # Clean up process controller
+        process_controller.reset()
+
 
 # === APPLICATION STARTUP === #
 
 if __name__ == "__main__":
     import uvicorn
-    print("Starting Premium Vietnamese TTS API...")
+    
+    print("Starting Premium Vietnamese TTS API Version 2...")
+    
+    # Keep access logs quiet but allow error logs
+    logging.getLogger("uvicorn.access").disabled = True
+    
     uvicorn.run(
         app, 
         host="0.0.0.0", 
         port=8000,
-        log_level="info",
-        access_log=True
+        log_level="info",         # Allow error and info logs for debugging
+        access_log=False,         # Disable access logs completely
+        use_colors=False          # Disable colors for cleaner logs
     )
-
-def load_profiles() -> dict:
-    """Load profile metadata from JSON file"""
-    profiles_file = f"{DATA_DIR}/profiles.json"
-    if os.path.exists(profiles_file):
-        with open(profiles_file, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
-
-def save_profiles(profiles: dict) -> None:
-    """Save profile metadata to JSON file"""
-    profiles_file = f"{DATA_DIR}/profiles.json"
-    with open(profiles_file, "w", encoding="utf-8") as f:
-        json.dump(profiles, f, indent=2, ensure_ascii=False)
-
-def run_command(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
-    """Execute command with proper logging"""
-    print(f"[CMD] {' '.join(cmd)}")
-    result = subprocess.run(
-        cmd, 
-        capture_output=True, 
-        text=True, 
-        encoding='utf-8',
-        **kwargs
-    )
-    
-    if result.stdout:
-        print(f"[OUT] {result.stdout}")
-    if result.stderr:
-        print(f"[ERR] {result.stderr}")
-        
-    if result.returncode != 0:
-        raise Exception(f"Command failed: {' '.join(cmd)}\\nError: {result.stderr}")
-    
-    return result
-
-def ensure_prompt_wav(sample_path: str, out_dir: str) -> str:
-    """Convert audio to 24kHz mono for Vietnamese TTS compatibility"""
-    prompt_wav = f"{out_dir}/prompt-24k.wav"
-    cmd = ["ffmpeg", "-y", "-i", sample_path, "-ac", "1", "-ar", "24000", prompt_wav]
-    
-    run_command(cmd)
-    
-    if not os.path.exists(prompt_wav):
-        raise Exception(f"Failed to create 24kHz audio: {prompt_wav}")
-    
-    return prompt_wav
-
-def read_clean_text(text: str) -> str:
-    """Clean text while preserving Vietnamese diacritics"""
-    text = text.strip()
-    # Normalize whitespace but preserve punctuation and diacritics
-    text = re.sub(r"\\s+", " ", text)
-    return text
-
-def split_vietnamese_sentences(text: str) -> List[str]:
-    """Split Vietnamese text into sentences for better prosody"""
-    # Split on Vietnamese sentence boundaries (. ! ? … ;)
-    parts = [p.strip() for p in re.split(r'(?<=[\\.\\.\\!\\?…;])\\s+', text) if p.strip()]
-    return parts if parts else [text]
-
-def build_vietnamese_tsv(out_dir: str, prompt_text: str, prompt_wav: str, sentences: List[str]) -> str:
-    """Build TSV file for ZipVoice batch processing"""
-    tsv_path = f"{out_dir}/tmp_test.tsv"
-    
-    # Create TSV with exact 4-column format required by ZipVoice
-    with open(tsv_path, "w", encoding="utf-8", newline="") as f:
-        for i, sent in enumerate(sentences, 1):
-            name = f"seg_{i:03d}"
-            # Format: name<TAB>prompt_text<TAB>prompt_wav<TAB>target_text
-            f.write("\t".join([name, prompt_text, prompt_wav, sent]) + "\n")
-    
-    # Validate TSV format
-    with open(tsv_path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-    
-    bad_lines = []
-    for ln, line in enumerate(lines, 1):
-        if len(line.strip().split("\t")) != 4:
-            bad_lines.append((ln, line.strip()))
-    
-    if bad_lines:
-        for ln, line in bad_lines[:5]:
-            print(f"[BAD] Line {ln} doesn't have 4 columns: {line}")
-        raise Exception("TSV format error (must have 4 TAB-separated columns)")
-    
-    print(f"[OK] Created TSV with {len(sentences)} sentences: {tsv_path}")
-    return tsv_path
-
-def vietnamese_inference(out_dir: str, tsv_path: str, gpu_offload: float = 0.9) -> None:
-    """Run Vietnamese TTS inference using ZipVoice with Vietnamese model"""
-    
-    # Set environment for GPU control and UTF-8 encoding
-    env = os.environ.copy()
-    env["CUDA_MEMORY_FRACTION"] = str(gpu_offload)
-    env["LANG"] = "C.UTF-8"
-    env["LC_ALL"] = "C.UTF-8"
-    env["PYTHONIOENCODING"] = "utf-8"
-    
-    # CRITICAL: ZipVoice command with Vietnamese model parameters
-    cmd = [
-        "python3", "-m", "zipvoice.bin.infer_zipvoice",
-        "--model-name", "zipvoice",
-        "--model-dir", MODEL_DIR,           # Vietnamese model directory
-        "--checkpoint-name", CHECKPOINT_NAME,  # Vietnamese checkpoint  
-        "--tokenizer", "espeak",            # CRITICAL: Must use espeak for Vietnamese
-        "--lang", "vi",                     # CRITICAL: Vietnamese language code
-        "--test-list", tsv_path,            # Batch processing with TSV
-        "--res-dir", out_dir,               # Output directory
-        # Let ZipVoice use default parameters for best Vietnamese quality
-    ]
-    
-    try:
-        run_command(cmd, cwd=ZIPVOICE_DIR, env=env, timeout=300)
-        print(f"[SUCCESS] Vietnamese TTS inference completed")
-    except Exception as e:
-        print(f"[ERROR] Vietnamese TTS failed: {str(e)}")
-        raise HTTPException(500, f"Vietnamese TTS synthesis failed: {str(e)}")
-
-def merge_vietnamese_segments(out_dir: str) -> str:
-    """Merge generated audio segments into final Vietnamese speech"""
-    wav_files = sorted(Path(out_dir).glob("seg_*.wav"))
-    
-    if not wav_files:
-        raise Exception("No seg_*.wav files found after Vietnamese inference")
-    
-    print(f"[INFO] Merging {len(wav_files)} Vietnamese audio segments")
-    
-    sr = None
-    chunks = []
-    
-    for wav_file in wav_files:
-        audio_data, sample_rate = sf.read(str(wav_file))
-        
-        if sr is None:
-            sr = sample_rate
-        if sample_rate != sr:
-            raise Exception(f"Sample rate mismatch: {wav_file} has {sample_rate}Hz, expected {sr}Hz")
-        
-        # Convert stereo to mono if needed
-        if audio_data.ndim == 2:
-            audio_data = audio_data[:, 0]
-        
-        chunks.append(audio_data)
-    
-    # Concatenate all segments
-    final_audio = np.concatenate(chunks)
-    
-    # Save final Vietnamese audio
-    final_path = f"{out_dir}/final_vietnamese.wav"
-    sf.write(final_path, final_audio, sr)
-    
-    print(f"[SUCCESS] Created final Vietnamese audio: {final_path} from {len(wav_files)} segments")
-    return final_path
-
-@app.get("/profiles")
-def get_profiles():
-    """Get all voice profiles"""
-    return load_profiles()
-
-@app.post("/profiles")
-def add_profile(
-    name: str = Form(...),
-    display_name: str = Form(...),
-    description: str = Form(...),
-    sample_text: str = Form(...),
-    sample_wav: UploadFile = File(...)
-):
-    """Add a new voice profile with audio sample"""
-    # Validate file format
-    if not sample_wav.filename.lower().endswith(('.wav', '.mp3', '.m4a', '.flac')):
-        raise HTTPException(400, "Audio file must be WAV, MP3, M4A, or FLAC format")
-    
-    profiles = load_profiles()
-    if name in profiles:
-        raise HTTPException(400, f"Profile '{name}' already exists")
-    
-    # Create profile directory
-    profile_dir = f"{DATA_DIR}/{name}"
-    os.makedirs(profile_dir, exist_ok=True)
-    
-    try:
-        # Save uploaded audio file
-        audio_path = f"{profile_dir}/sample.wav"
-        with open(audio_path, "wb") as f:
-            shutil.copyfileobj(sample_wav.file, f)
-        
-        # Save text files (Vietnamese-compatible encoding)
-        with open(f"{profile_dir}/sample.txt", "w", encoding="utf-8") as f:
-            f.write(sample_text.strip())
-        
-        with open(f"{profile_dir}/input.txt", "w", encoding="utf-8") as f:
-            f.write(sample_text.strip())
-        
-        # Update profiles metadata
-        profiles[name] = {
-            "name": display_name,
-            "description": description,
-            "path": profile_dir,
-            "is_default": False,
-            "created_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        
-        save_profiles(profiles)
-        return {"message": f"Vietnamese voice profile '{name}' created successfully"}
-        
-    except Exception as e:
-        # Cleanup on error
-        if os.path.exists(profile_dir):
-            shutil.rmtree(profile_dir, ignore_errors=True)
-        raise HTTPException(500, f"Failed to create profile: {str(e)}")
-
-@app.delete("/profiles/{profile_id}")
-def delete_profile(profile_id: str):
-    """Delete a voice profile (protects default profiles)"""
-    profiles = load_profiles()
-    if profile_id not in profiles:
-        raise HTTPException(404, "Profile not found")
-    
-    if profiles[profile_id].get("is_default", False):
-        raise HTTPException(400, "Cannot delete default profile")
-    
-    # Remove profile directory and metadata
-    profile_dir = profiles[profile_id]["path"]
-    if os.path.exists(profile_dir):
-        shutil.rmtree(profile_dir)
-    
-    del profiles[profile_id]
-    save_profiles(profiles)
-    
-    return {"message": f"Profile '{profile_id}' deleted successfully"}
-
-@app.post("/synthesize_speech")
-def synthesize_speech(
-    profile_id: Optional[str] = Form(None),  # Optional - uses default if not provided
-    text: str = Form(...),
-    speed: float = Form(VIETNAMESE_DEFAULTS["speed"]),
-    guidance_scale: float = Form(VIETNAMESE_DEFAULTS["guidance_scale"]),
-    num_step: int = Form(VIETNAMESE_DEFAULTS["num_step"]),
-    feat_scale: float = Form(VIETNAMESE_DEFAULTS["feat_scale"]),
-    target_rms: float = Form(VIETNAMESE_DEFAULTS["target_rms"]),
-    context_length: int = Form(VIETNAMESE_DEFAULTS["context_length"]),
-    gpu_offload: float = Form(VIETNAMESE_DEFAULTS["gpu_offload"])
-):
-    """Premium Vietnamese Text-to-Speech synthesis"""
-    
-    # Use default profile if none specified
-    if not profile_id:
-        profile_id = DEFAULT_PROFILE
-        print(f"[INFO] Using default Vietnamese profile: {profile_id}")
-    
-    profiles = load_profiles()
-    if profile_id not in profiles:
-        raise HTTPException(404, f"Voice profile '{profile_id}' not found")
-    
-    profile_dir = profiles[profile_id]["path"]
-    sample_txt_path = f"{profile_dir}/sample.txt"
-    sample_wav_path = f"{profile_dir}/sample.wav"
-    
-    # Validate profile files
-    if not os.path.exists(sample_txt_path) or not os.path.exists(sample_wav_path):
-        raise HTTPException(400, f"Profile '{profile_id}' missing required files (sample.txt or sample.wav)")
-    
-    # Read and clean texts
-    with open(sample_txt_path, "r", encoding="utf-8") as f:
-        prompt_text = read_clean_text(f.read())
-    
-    vietnamese_text = read_clean_text(text)
-    
-    # Validate input
-    if not vietnamese_text:
-        raise HTTPException(400, "Input text cannot be empty")
-    
-    # Limit text length for memory management
-    words = vietnamese_text.split()
-    if len(words) > context_length:
-        print(f"[WARN] Text truncated to {context_length} words for memory efficiency")
-        vietnamese_text = " ".join(words[:context_length])
-    
-    # Create unique output directory with timestamp
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = f"/tmp/vietnamese_tts_{timestamp}_{uuid.uuid4().hex[:8]}"
-    os.makedirs(out_dir, exist_ok=True)
-    
-    try:
-        print(f"=== Premium Vietnamese TTS (espeak tokenizer, vi language) ===")
-        print(f"[INFO] Profile: {profile_id}")
-        print(f"[INFO] Text: '{vietnamese_text}' ({len(vietnamese_text)} chars, {len(words)} words)")
-        print(f"[INFO] Output directory: {out_dir}")
-        
-        # Step 1: Convert sample audio to 24kHz mono (critical for Vietnamese compatibility)
-        prompt_wav_24k = ensure_prompt_wav(sample_wav_path, out_dir)
-        print(f"[OK] Converted audio to 24kHz mono: {prompt_wav_24k}")
-        
-        # Step 2: Split Vietnamese text into sentences for better prosody
-        sentences = split_vietnamese_sentences(vietnamese_text)
-        if not sentences:
-            raise HTTPException(400, "Unable to process Vietnamese text")
-        print(f"[INFO] Split into {len(sentences)} Vietnamese sentences")
-        
-        # Step 3: Create TSV file for ZipVoice batch processing
-        tsv_path = build_vietnamese_tsv(out_dir, prompt_text, prompt_wav_24k, sentences)
-        
-        # Step 4: Run Vietnamese TTS inference with optimal settings
-        vietnamese_inference(out_dir, tsv_path, gpu_offload)
-        
-        # Step 5: Merge audio segments into final Vietnamese speech
-        final_audio_path = merge_vietnamese_segments(out_dir)
-        
-        if not os.path.exists(final_audio_path):
-            raise HTTPException(500, "Failed to generate Vietnamese audio")
-        
-        # Verify audio file is valid
-        try:
-            sf.read(final_audio_path)
-        except Exception as e:
-            raise HTTPException(500, f"Generated audio file is corrupted: {str(e)}")
-        
-        print(f"[DONE] Premium Vietnamese TTS completed successfully!")
-        print(f"[RESULT] Audio file: {final_audio_path}")
-        
-        return FileResponse(
-            final_audio_path,
-            media_type="audio/wav",
-            filename=f"vietnamese_speech_{timestamp}.wav"
-        )
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"[ERROR] Vietnamese TTS synthesis failed: {str(e)}")
-        raise HTTPException(500, f"Vietnamese TTS synthesis failed: {str(e)}")
-    
-    finally:
-        # Note: Don't delete temp files immediately as FileResponse needs them
-        # Files will be cleaned up by system temp cleanup
-        pass
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)

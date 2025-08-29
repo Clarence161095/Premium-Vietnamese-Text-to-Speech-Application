@@ -1,0 +1,22 @@
+Sau khi test xong xuôi thì tôi cảm thấy việc cài đặt nâng cao chả có ích lợi gì vậy nên tôi muốn refactoring lại toàn bộ app.
+Giờ hãy checkout ra một branch mới là: version-2.
+Hãy chỉnh sử mọi thứ trên branch mới này và branch version-2 này giờ sẽ là branch mặc định.
+1. Phần Backend:
+  1.1. Không cần cài đặt input cho phần nâng cao nữa hãy cài đặt mặc định như trong hướng dẫn này là được: ZipVoice\README.md.
+  1.2 Tuy nhiên logic hiện tại đã tạo được tiếng việt chuẩn rồi nên hãy cân nhắc đừng bỏ đi những phần tốt mà chỉ đơn giản là bỏ các phần input nâng cao thôi.
+  1.3 Hiện tại tôi thấy có trường hợp là hệ thống render gặp lỗi nhưng nó cứ render liên tục liên tục liên tục. Tôi phát hiện thấy là mô hình chỉ render tối ưu trong vòng 1 phút đổ lại. Vì vậy giờ đầu vào thì thay vì render một phát luôn từ đầu tới cuối thì hãy render từng phần sau đó ráp lại thành 1 file. Mỗi phần là một câu hãy ngắt từng câu một sau đó nối chúng lại thay vì render một phát từ đầu tới cuối luôn. Mỗi lần thực hiện thì hãy thực hiện trong folder có tên là 'DOING' với các phần được hãy tham khảo cách thực hiện của refer\simple-index.py.
+  1.4 Để tránh trường hợp hệ thống quá tải, thì khi đang thực hiện render cũng phải check liên tục xem nhiệt độ của GPU và mức độ quá tải của nó, nếu nhiệt độ GPU lên trên 90 độ thì phải giảm tải việc render lại. Hãy luôn giữ mức độ hoạt động GPU khoảng 85% là ok.
+  1.5 Phải có một nút để STOP tiến trình hiện tại tránh quá tải cho hệ thống.
+  1.6 Hãy cũng lưu lại dữ liệu thời gian render và trên số từ render để tính tính toán ước lượng trong tương lai hãy luôn lưu thông tin về số lượng từ và thời gian cần đã render của 1000 lần render gần nhất để tính toán con số chính xác để ước lượng trong tương lai.
+
+2. Phẩn FrontEnd
+  2.1 bỏ phần Preset chất lượng
+  2.2 Tập trung vào phần quản lý giọng nói Profile sao cho việc quản lý nhìn chuẩn chỉnh và ok nhất vì đó là quan trọng nhất.
+  2.3 Phần thống kê thì:
+    2.3.1 Khi đang render thì phải bắt đầu đếm thời gian
+    2.3.2 Phải đưa ra ước lượng thời gian phải bỏ ra cho Đoạn văn bản trên
+    2.3.3 Gọi tới API để lấy thông tin GPU và VRAM hiện tại mỗi 5s để check tình trạng, và có nút dừng khẩn cấp
+  2.4 Bỏ phần cài đặt nâng cao đi vì giờ mọi thứ là mặc định rồi
+  2.5 ko có max token nữa gì giờ sẽ thực hiện render bao nhiêu cũng được vì giờ cứ render theo từng câu và ghép lại mà nên thoải mái chỉ cần đưa ra thông số về số ký tự hiện tại là được rồi.
+
+Hãy thực hiện checkout -b version-2 và thực hiện cải tổ/refactoring lại toàn bộ app.

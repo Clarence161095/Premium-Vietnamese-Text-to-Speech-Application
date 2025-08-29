@@ -487,6 +487,53 @@ body {
   background: linear-gradient(135deg, #16A085 0%, var(--accent-primary) 100%);
 }
 
+.btn-danger {
+  /* Background & Color */
+  background: linear-gradient(135deg, var(--accent-danger) 0%, #E74C3C 100%);
+  color: var(--text-inverse);
+  
+  /* Typography */
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.3px;
+  
+  /* Layout */
+  padding: 14px 28px;
+  border: none;
+  border-radius: 12px;
+  
+  /* Interaction */
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* Effects */
+  box-shadow: var(--shadow-md);
+  position: relative;
+  overflow: hidden;
+  
+  /* Accessibility */
+  line-height: 1.2;
+  min-height: 44px;
+  min-width: 120px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-danger:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: var(--shadow-lg);
+  background: linear-gradient(135deg, #E74C3C 0%, var(--accent-danger) 100%);
+}
+
+.btn-danger:disabled {
+  background: var(--interactive-disabled);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 .btn-outline {
   /* Background & Color */
   background: transparent;
