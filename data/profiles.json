@@ -1,0 +1,16 @@
+{
+  "NSUT-Phu-Thang": {
+    "name": "NSUT Phú Thăng",
+    "description": "Giọng nam trung niên",
+    "path": "/data/NSUT-Phu-Thang",
+    "is_default": true,
+    "created_at": "2025-08-28"
+  },
+  "tina": {
+    "name": "Tina",
+    "description": "Giọng nữ trẻ",
+    "path": "/data/tina",
+    "is_default": true,
+    "created_at": "2025-08-28"
+  }
+}

@@ -1,0 +1,31 @@
+# Premium Vietnamese TTS API - Production Dependencies
+# FastAPI backend with ZipVoice integration
+
+# Core API framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# HTTP and CORS support
+starlette==0.27.0
+anyio==4.0.0
+
+# Audio processing
+soundfile==0.12.1
+numpy==1.24.3
+librosa==0.10.1
+
+# Data validation and serialization
+pydantic==2.5.0
+pydantic-core==2.14.1
+
+# System integration
+pathlib2==2.3.7
+
+# Optional: Performance monitoring (uncomment if needed)
+# psutil==5.9.6
+# GPUtil==1.4.0
+
+# Development utilities (remove in production)
+# pytest==7.4.3
+# httpx==0.25.2
