@@ -931,9 +931,47 @@ function App() {
     showNotification('success', 'Processing stopped successfully');
   };
 
+  // Clean Vietnamese text before synthesis
+  const cleanVietnameseText = (text) => {
+    if (!text) return '';
+    
+    // Remove parenthetical annotations (including Chinese characters, explanations, etc.)
+    // Matches: (content), [content], （content）
+    text = text.replace(/[(\[（][^)\]）]*[)\]）]/g, '');
+    
+    // Remove emojis and Unicode symbols
+    text = text.replace(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2500}-\u{2BEF}]|[\u{2702}-\u{27B0}]|[\u{24C2}-\u{1F251}]|[\u{1f926}-\u{1f937}]|[\u{10000}-\u{10ffff}]|[\u2640-\u2642]|[\u2600-\u2B55]|[\u200d]|[\u23cf]|[\u23e9]|[\u231a]|[\ufe0f]|[\u3030]/gu, '');
+    
+    // Remove arrow symbols and special markers
+    text = text.replace(/[→←↑↓➡️⬅️⬆️⬇️▶️◀️▲▼👉👈👆👇]/g, '');
+    
+    // Normalize multiple whitespace to single space
+    text = text.replace(/\s+/g, ' ');
+    
+    // Clean up spacing around punctuation
+    text = text.replace(/\s*([.!?…,;:])\s*/g, '$1 ');
+    
+    // Remove extra spaces at beginning of lines
+    text = text.replace(/^\s+/gm, '');
+    
+    // Remove trailing spaces and clean up final result
+    text = text.replace(/\s+$/, '');
+    text = text.trim();
+    
+    return text;
+  };
+
   const handleSynthesize = async () => {
     if (!text.trim()) {
       showNotification('error', t.pleaseEnterText);
+      return;
+    }
+
+    // Clean the text before sending to backend
+    const cleanedText = cleanVietnameseText(text);
+    
+    if (!cleanedText.trim()) {
+      showNotification('error', 'Văn bản sau khi làm sạch không có nội dung hợp lệ');
       return;
     }
 
@@ -945,12 +983,13 @@ function App() {
     try {
       const formData = new FormData();
       if (selectedProfile) formData.append('profile_id', selectedProfile);
-      formData.append('text', text);
+      formData.append('text', cleanedText);  // Use cleaned text
 
       console.log('Sending request with:', {
         profile_id: selectedProfile || 'default',
-        text_length: text.length,
-        text_preview: text.substring(0, 50) + '...'
+        original_text_length: text.length,
+        cleaned_text_length: cleanedText.length,
+        text_preview: cleanedText.substring(0, 50) + '...'
       });
 
       const response = await fetch('http://localhost:8000/synthesize_speech', {
@@ -1195,6 +1234,24 @@ function App() {
                   </span>
                 </span>
               </div>
+
+              {/* Cleaned Text Preview */}
+              {text && cleanVietnameseText(text) !== text && (
+                <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-blue-400 text-sm font-medium flex items-center">
+                      <i className="fas fa-broom mr-2"></i>
+                      Văn bản đã làm sạch (sẽ được gửi đến TTS)
+                    </h4>
+                    <span className="text-blue-300 text-xs">
+                      {cleanVietnameseText(text).length} ký tự
+                    </span>
+                  </div>
+                  <div className="text-white/80 text-sm bg-black/20 p-2 rounded max-h-20 overflow-y-auto">
+                    {cleanVietnameseText(text) || <span className="text-red-400">Không có nội dung hợp lệ sau khi làm sạch</span>}
+                  </div>
+                </div>
+              )}
 
               {/* Example Texts */}
               <div className="mb-6">

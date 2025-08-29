@@ -483,12 +483,50 @@ def clean_vietnamese_text(text: str) -> str:
     # Strip whitespace and normalize
     text = text.strip()
     
+    # Remove parenthetical annotations (including Chinese characters, explanations, etc.)
+    # Matches: (content), [content], （content）
+    text = re.sub(r'[(\[（][^)\]）]*[)\]）]', '', text)
+    
+    # Remove emojis and other Unicode symbols
+    # This pattern covers most emoji ranges and common symbols
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map symbols
+        "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        "\U00002500-\U00002BEF"  # chinese char
+        "\U00002702-\U000027B0"
+        "\U00002702-\U000027B0"
+        "\U000024C2-\U0001F251"
+        "\U0001f926-\U0001f937"
+        "\U00010000-\U0010ffff"
+        "\u2640-\u2642"
+        "\u2600-\u2B55"
+        "\u200d"
+        "\u23cf"
+        "\u23e9"
+        "\u231a"
+        "\ufe0f"  # diacritical marks
+        "\u3030"
+        "]+", flags=re.UNICODE)
+    text = emoji_pattern.sub('', text)
+    
+    # Remove arrow symbols and special markers like 👉
+    text = re.sub(r'[→←↑↓➡️⬅️⬆️⬇️▶️◀️▲▼👉👈👆👇]', '', text)
+    
     # Normalize multiple whitespace to single space
     text = re.sub(r'\s+', ' ', text)
     
-    # Ensure proper punctuation spacing
-    text = re.sub(r'\s*([.!?…])\s*', r'\1 ', text)
-    text = re.sub(r'\s+$', '', text)  # Remove trailing space
+    # Clean up spacing around punctuation
+    text = re.sub(r'\s*([.!?…,;:])\s*', r'\1 ', text)
+    
+    # Remove extra spaces at beginning of lines
+    text = re.sub(r'^\s+', '', text, flags=re.MULTILINE)
+    
+    # Remove trailing spaces and clean up final result
+    text = re.sub(r'\s+$', '', text)
+    text = text.strip()
     
     return text
 
