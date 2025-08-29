@@ -260,10 +260,8 @@ generated/
 # models/
 
 # Data files (except samples)
-!data/*/
-!data/*/*.wav
-# !data/tina/
-# !data/NSUT-Phu-Thang/
+# !data/*/
+# !data/*/*.wav
 
 # IDE files
 .vscode/
@@ -290,3 +288,8 @@ Thumbs.db
 
 # DOING
 DOING
+data
+data/*/
+data/*/*
+data/data.json
+data/data.json
