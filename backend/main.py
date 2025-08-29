@@ -273,15 +273,10 @@ def add_render_record(text: str, profile_id: str, audio_path: str, word_count: i
         # Add to beginning of list (most recent first)
         data_log.insert(0, record)
         
-        # Clean up old records (keep only last 8 hours)
-        cutoff_time = datetime.datetime.now() - datetime.timedelta(hours=8)
-        data_log = [
-            record for record in data_log 
-            if datetime.datetime.fromisoformat(record["timestamp"]) > cutoff_time
-        ]
-        
-        # Limit to maximum 100 records even within 8 hours
-        data_log = data_log[:100]
+        # Clean up old records: if more than 50 records, keep only the most recent 50
+        if len(data_log) > 50:
+            data_log = data_log[:50]
+            print(f"[INFO] Cleaned up old records, keeping only the most recent 50 entries")
         
         save_data_log(data_log)
         print(f"[LOG] Added render record: {record['id']} ({word_count} words, {processing_time:.1f}s)")
@@ -290,7 +285,7 @@ def add_render_record(text: str, profile_id: str, audio_path: str, word_count: i
         print(f"[WARN] Failed to add render record: {e}")
 
 def get_recent_renders(page: int = 1, per_page: int = 10) -> Dict[str, Any]:
-    """Get paginated list of recent renders from last 8 hours"""
+    """Get paginated list of recent renders (keeps most recent 50 records)"""
     try:
         data_log = load_data_log()
         
@@ -487,33 +482,19 @@ def clean_vietnamese_text(text: str) -> str:
     # Matches: (content), [content], （content）
     text = re.sub(r'[(\[（][^)\]）]*[)\]）]', '', text)
     
-    # Remove emojis and other Unicode symbols
-    # This pattern covers most emoji ranges and common symbols
+    # SIMPLIFIED emoji removal - only target specific problematic emojis
+    # Remove only clear emojis that are not Vietnamese text
+    text = re.sub(r'[👉👈👆👇→←↑↓➡️⬅️⬆️⬇️▶️◀️▲▼]', '', text)
+    
+    # Remove specific emoji ranges that don't conflict with Vietnamese
     emoji_pattern = re.compile(
         "["
-        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F600-\U0001F64F"  # emoticons  
         "\U0001F300-\U0001F5FF"  # symbols & pictographs
         "\U0001F680-\U0001F6FF"  # transport & map symbols
         "\U0001F1E0-\U0001F1FF"  # flags (iOS)
-        "\U00002500-\U00002BEF"  # chinese char
-        "\U00002702-\U000027B0"
-        "\U00002702-\U000027B0"
-        "\U000024C2-\U0001F251"
-        "\U0001f926-\U0001f937"
-        "\U00010000-\U0010ffff"
-        "\u2640-\u2642"
-        "\u2600-\u2B55"
-        "\u200d"
-        "\u23cf"
-        "\u23e9"
-        "\u231a"
-        "\ufe0f"  # diacritical marks
-        "\u3030"
         "]+", flags=re.UNICODE)
     text = emoji_pattern.sub('', text)
-    
-    # Remove arrow symbols and special markers like 👉
-    text = re.sub(r'[→←↑↓➡️⬅️⬆️⬇️▶️◀️▲▼👉👈👆👇]', '', text)
     
     # Normalize multiple whitespace to single space
     text = re.sub(r'\s+', ' ', text)
