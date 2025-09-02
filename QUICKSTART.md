@@ -1,6 +1,6 @@
-# 🚀 Hướng Dẫn Khởi Động Nhanh - Premium Vietnamese TTS
+# 🚀 Hướng Dẫn Khởi Động Nhanh - Premium Vietnamese TTS v2.0
 
-> **5 phút để chạy ứng dụng Text-to-Speech tiếng Việt chuyên nghiệp!**
+> **5 phút để chạy ứng dụng Text-to-Speech tiếng Việt chuyên nghiệp với giám sát GPU thời gian thực!**
 
 ## ⚡ Instant Setup (2 Minutes)
 
@@ -10,7 +10,7 @@
 docker --version
 docker compose version
 
-# Check NVIDIA GPU (optional but recommended)
+# Check NVIDIA GPU (recommended for best performance)
 nvidia-smi
 
 # Check disk space (minimum 10GB required)
@@ -34,26 +34,28 @@ docker compose ps
 - **🎨 Web Interface**: http://localhost:3000
 - **📊 API Documentation**: http://localhost:8000/docs
 - **🔍 Health Check**: http://localhost:8000/
+- **📈 GPU Status**: http://localhost:8000/gpu_status
 
 ## 🎭 First Vietnamese Speech Generation
 
 ### Via Web Interface (Recommended)
 
 1. **Open the application**: http://localhost:3000
-2. **Enter Vietnamese text**: 
+2. **Enter Vietnamese text**:
    ```
-   Xin chào, tôi là trợ lý ảo thông minh. 
+   Xin chào, tôi là trợ lý ảo thông minh.
    Hôm nay trời đẹp quá!
    ```
-3. **Select quality preset**: Choose "Balanced" for best quality/speed ratio
-4. **Click "Tạo Giọng Nói"** (Generate Voice)
-5. **Listen to the result**: Audio will play automatically
+3. **Click "Sử dụng giọng mặc định"** (Use Default Voice) - no profile required!
+4. **Click "Tạo giọng nói"** (Generate Voice)
+5. **Monitor real-time progress**: Watch GPU status and processing updates
+6. **Listen to the result**: Audio will play automatically
 
 ### Via API (Advanced Users)
 
 ```bash
-# Basic Vietnamese synthesis
-curl -X POST "http://localhost:8000/synthesize_speech" \
+# Basic Vietnamese synthesis (Version 2.0)
+curl -X POST "http://localhost:8000/synthesize_speech_v2" \
   -F "text=Xin chào Việt Nam! Tôi yêu tiếng Việt." \
   --output my_first_vietnamese.wav
 
@@ -79,67 +81,69 @@ Xin chào, tôi là [Your Name]. Tôi rất vui được gặp bạn.
 ```
 
 ### Step 3: Create Profile via Web Interface
-1. Click **"Tạo Profile Mới"** (Create New Profile)
+1. Click **"Thêm profile mới"** (Add New Profile)
 2. Fill in the form:
-   - **Profile Name**: `my-voice`
-   - **Display Name**: `My Custom Voice`
-   - **Description**: `My personal Vietnamese voice`
-   - **Sample Text**: [exact transcript]
-   - **Audio File**: [upload your sample]
-3. Click **"Tạo Profile"** (Create Profile)
+   - **Tên profile**: `my-voice`
+   - **Tên hiển thị**: `My Custom Voice`
+   - **Mô tả**: `My personal Vietnamese voice`
+   - **Transcript mẫu**: [exact transcript]
+   - **File audio mẫu**: [upload your sample]
+3. Click **"Tạo profile"** (Create Profile)
 
 ### Step 4: Test Your Voice
-1. Select your new profile from the dropdown
-2. Enter any Vietnamese text
+1. Select your new profile from the list
+2. Enter any Vietnamese text (unlimited length!)
 3. Generate speech with your cloned voice!
 
-## 📊 Quality Optimization Guide
+## 📊 Version 2.0 Features Overview
 
-### Built-in Quality Presets
+### ✅ **Simplified Experience**
+- **No Quality Presets**: Uses optimized ZipVoice defaults
+- **No Advanced Settings**: Everything works out-of-the-box
+- **Unlimited Text Length**: Sentence-by-sentence processing handles any size
+- **Default Voice Ready**: Start immediately without profile creation
 
-| Preset | Speed | Quality | Use Case |
-|--------|--------|---------|----------|
-| **⚡ Fast** | ~6-8s | Good | Quick testing, demos |
-| **⚖️ Balanced** | ~8-12s | Excellent | Daily use, presentations |
-| **💎 Premium** | ~15-20s | Outstanding | Final production, broadcasts |
+### ✅ **Real-Time Monitoring**
+- **GPU Temperature**: Monitor every 5 seconds
+- **VRAM Usage**: Track memory consumption
+- **Processing Progress**: See sentence-by-sentence status
+- **Emergency Stop**: Halt processing if needed
 
-### Manual Parameter Tuning
-
-For advanced users, adjust these parameters in the web interface:
-
-```javascript
-// Quality vs Speed trade-offs
-guidance_scale: 1.2,    // Higher = better quality (0.8-1.5)
-num_step: 20,          // More steps = better quality (12-24)
-speed: 1.0,            // Speech rate (0.8-1.2)
-```
+### ✅ **Safety & Performance**
+- **Thermal Protection**: Auto-stop at 90°C, throttle at 85°C
+- **Performance Metrics**: Track last 1000 renders
+- **Smart Processing**: Optimized for 85% GPU utilization
+- **Automatic Cleanup**: Old files removed after 8 hours
 
 ## 🔧 Common Use Cases
 
 ### 1. Podcast Introduction
 ```bash
-curl -X POST "http://localhost:8000/synthesize_speech" \
+curl -X POST "http://localhost:8000/synthesize_speech_v2" \
   -F "text=Xin chào và chào mừng các bạn đến với podcast của chúng tôi. Tôi là người dẫn chương trình hôm nay." \
-  -F "guidance_scale=1.2" \
-  -F "num_step=24" \
   --output podcast_intro.wav
 ```
 
 ### 2. E-learning Content
 ```bash
-curl -X POST "http://localhost:8000/synthesize_speech" \
+curl -X POST "http://localhost:8000/synthesize_speech_v2" \
   -F "text=Bài học hôm nay chúng ta sẽ tìm hiểu về lịch sử Việt Nam. Hãy cùng bắt đầu nhé!" \
-  -F "speed=0.9" \
   --output lesson_intro.wav
 ```
 
 ### 3. Voice Assistant Responses
 ```bash
-curl -X POST "http://localhost:8000/synthesize_speech" \
+curl -X POST "http://localhost:8000/synthesize_speech_v2" \
   -F "text=Tôi đã tìm thấy 5 kết quả cho yêu cầu của bạn. Bạn có muốn tôi đọc chi tiết không?" \
-  -F "guidance_scale=1.0" \
-  -F "num_step=16" \
   --output assistant_response.wav
+```
+
+### 4. Long Document Processing
+```bash
+# No length limits - process entire chapters!
+curl -X POST "http://localhost:8000/synthesize_speech_v2" \
+  -F "text=[Your entire chapter text here - any length!]" \
+  --output chapter_audio.wav
 ```
 
 ## ⚠️ Troubleshooting Quick Fixes
@@ -156,21 +160,24 @@ docker compose restart
 docker compose logs backend
 ```
 
-### Issue: Poor Audio Quality
+### Issue: High GPU Temperature
 ```bash
-# Verify Vietnamese model is loaded
-docker compose logs backend | grep "Vietnamese model"
+# Monitor GPU status
+curl "http://localhost:8000/gpu_status" | jq .
 
-# Should see: "Using local model dir /models/zipvoice_vi"
+# Emergency stop if needed
+curl -X POST "http://localhost:8000/stop_render"
+
+# System will auto-throttle at 85°C and stop at 90°C
 ```
 
 ### Issue: Slow Processing
 ```bash
-# Check GPU usage
+# Check GPU utilization
 nvidia-smi
 
-# If no GPU, processing will be slower but still work
-# Reduce num_step parameter to 12 for faster processing
+# Version 2.0 optimizes for 85% GPU utilization
+# Processing is sentence-by-sentence for stability
 ```
 
 ### Issue: Profile Creation Fails
@@ -185,31 +192,34 @@ ffmpeg -i input.mp3 -ar 24000 -ac 1 output.wav
 ## 🎯 Performance Tips
 
 ### Optimize for Speed
-- Use **Fast preset** for real-time applications
-- Keep text under 100 words per request
-- Use single sentences when possible
+- Use shorter sentences for faster processing
+- Monitor GPU temperature to prevent throttling
+- Default settings are already optimized
 
 ### Optimize for Quality
-- Use **Premium preset** for final production
-- Ensure clean audio samples for voice cloning
-- Use proper Vietnamese punctuation in text
+- Use clean audio samples for voice cloning
+- Ensure proper Vietnamese punctuation in text
+- Default ZipVoice settings provide excellent quality
 
-### Optimize for Resources
+### Monitor System Health
 ```bash
-# Monitor resource usage
-docker stats
+# Real-time GPU monitoring
+curl "http://localhost:8000/gpu_status"
 
-# Adjust GPU memory usage (in docker-compose.yml)
-CUDA_MEMORY_FRACTION=0.7  # Use 70% of GPU memory
+# Processing status
+curl "http://localhost:8000/render_status"
+
+# Performance metrics
+curl "http://localhost:8000/performance_metrics"
 ```
 
 ## 📈 Advanced Features
 
 ### Batch Processing Multiple Texts
 ```bash
-# Process multiple files
+# Process multiple files (sentence-by-sentence)
 for text in "Câu một." "Câu hai." "Câu ba."; do
-  curl -X POST "http://localhost:8000/synthesize_speech" \
+  curl -X POST "http://localhost:8000/synthesize_speech_v2" \
     -F "text=$text" \
     --output "audio_$(date +%s).wav"
 done
@@ -229,16 +239,20 @@ curl -X DELETE "http://localhost:8000/profiles/my-voice"
 # Backend status
 curl "http://localhost:8000/" | jq .
 
-# Check processing capabilities
-curl "http://localhost:8000/docs"
+# GPU status
+curl "http://localhost:8000/gpu_status" | jq .
+
+# Recent renders
+curl "http://localhost:8000/recent_renders" | jq .
 ```
 
 ## 🎓 Next Steps
 
-1. **🎨 Explore the Web Interface**: Try all quality presets and features
+1. **🎨 Explore the Web Interface**: Try real-time monitoring features
 2. **🎤 Create Multiple Profiles**: Experiment with different voices
 3. **🔧 Read Advanced Docs**: Check [MASTER_PROMPT.md](MASTER_PROMPT.md) for technical details
 4. **🚀 Deploy to Production**: See [README.md](README.md) for production deployment guide
+5. **📊 Monitor Performance**: Use built-in metrics for optimization
 
 ## 📞 Need Help?
 
@@ -246,12 +260,13 @@ curl "http://localhost:8000/docs"
 - **💡 Feature Requests**: Submit enhancement proposals
 - **📚 Documentation**: Full technical docs in [MASTER_PROMPT.md](MASTER_PROMPT.md)
 - **🔍 API Reference**: Interactive docs at http://localhost:8000/docs
+- **📈 GPU Monitoring**: Real-time status at http://localhost:8000/gpu_status
 
 ---
 
 <div align="center">
 
-**🇻🇳 Happy Vietnamese TTS Generation!**
+**🇻🇳 Happy Vietnamese TTS Generation with v2.0!**
 
 [Back to Main Documentation](README.md) • [Technical Details](MASTER_PROMPT.md) • [Web Interface](http://localhost:3000)
 
@@ -265,28 +280,34 @@ docker compose up -d
 ## Access the Application
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8000
+- **GPU Status**: http://localhost:8000/gpu_status
+- **API Docs**: http://localhost:8000/docs
 
 ## Basic Usage
 1. Open http://localhost:3000
 2. Click "**Sử dụng giọng mặc định**" (Use Default Voice)
 3. Enter Vietnamese text or click example text
-4. Click "**🎤 Tạo giọng nói tiếng Việt**" (Generate Vietnamese Speech)
-5. Wait 5-15 seconds for audio generation
+4. Click "**🎤 Tạo giọng nói**" (Generate Voice)
+5. Monitor GPU status and processing progress
+6. Listen to the result
 
 ## Test API Directly
 ```bash
-curl -X POST "http://localhost:8000/synthesize_speech" \
+curl -X POST "http://localhost:8000/synthesize_speech_v2" \
   -F "text=Xin chào Việt Nam" \
   --output test.wav
 ```
 
-## Features Complete ✅
-- ✅ Default Vietnamese voice (no profile required)
-- ✅ Custom voice profile management
-- ✅ Advanced configuration (10k tokens, 90% GPU)
-- ✅ Optimized for Vietnamese (eSpeak + vi tokenizer)
-- ✅ Fast processing for short sentences (~10 seconds)
-- ✅ Vietnamese UI with examples and presets
-- ✅ Quality presets (High Quality, Balanced, Fast)
+## Version 2.0 Features Complete ✅
+- ✅ **Simplified UX**: No complex settings, works out-of-the-box
+- ✅ **GPU Monitoring**: Real-time temperature, utilization, VRAM tracking
+- ✅ **Emergency Stop**: Safety controls for runaway processes
+- ✅ **Unlimited Processing**: Sentence-by-sentence handles any text length
+- ✅ **Performance Metrics**: Track last 1000 renders for optimization
+- ✅ **Thermal Protection**: Auto-throttle at 85°C, stop at 90°C
+- ✅ **Default Voice Ready**: Start immediately without profile creation
+- ✅ **Vietnamese Optimized**: eSpeak tokenizer with vi language support
+- ✅ **Real-time Feedback**: Live processing status and progress bars
+- ✅ **Professional UI**: Clean interface focusing on voice quality
 
-The application is now fully functional and optimized for Vietnamese TTS!
+The application is now fully functional and optimized for Vietnamese TTS with enterprise-grade monitoring and safety features!
