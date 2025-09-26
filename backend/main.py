@@ -6,9 +6,13 @@ Using ZipVoice defaults for optimal Vietnamese speech synthesis.
 """
 
 import asyncio
-import datetime
 import json
 import os
+import hashlib
+import time
+import threading
+from collections import deque
+from datetime import datetime, timedelta
 import re
 import shutil
 import subprocess
@@ -43,6 +47,11 @@ DEFAULT_PROFILE = "tina"
 DOING_DIR = "/DOING"  # Temporary processing folder
 DATA_LOG_FILE = "/data/data.json"  # Lightweight DB for rendering history
 
+# Cleanup Configuration
+CLEANUP_INTERVAL_HOURS = 24  # Run cleanup every 24 hours
+SESSION_EXPIRY_DAYS = 7  # Delete sessions older than 7 days
+TEMP_FILE_EXPIRY_HOURS = 8  # Delete temp files older than 8 hours
+
 # Use ZipVoice defaults only (no advanced settings)
 ZIPVOICE_DEFAULTS = {
     "tokenizer": "espeak",
@@ -68,7 +77,7 @@ class RenderMetrics:
             self.recent_renders.append({
                 'words': word_count,
                 'time': render_time,
-                'timestamp': datetime.datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat()
             })
     
     def estimate_time(self, word_count: int) -> float:
@@ -259,8 +268,8 @@ def add_render_record(text: str, profile_id: str, audio_path: str, word_count: i
         
         # Create new record
         record = {
-            "id": datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3],  # Unique ID with milliseconds
-            "timestamp": datetime.datetime.now().isoformat(),
+            "id": datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3],  # Unique ID with milliseconds
+            "timestamp": datetime.now().isoformat(),
             "text": text[:200] + "..." if len(text) > 200 else text,  # Truncate long text for storage
             "full_text_preview": text[:50] + "..." if len(text) > 50 else text,  # Short preview
             "profile_id": profile_id,
@@ -551,7 +560,7 @@ def split_vietnamese_sentences(text: str) -> List[str]:
 
 def create_doing_directory() -> str:
     """Create timestamped directory in DOING folder for processing"""
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     doing_dir = f"{DOING_DIR}/{timestamp}"
     os.makedirs(doing_dir, exist_ok=True)
     print(f"[INFO] Created processing directory: {doing_dir}")
@@ -563,7 +572,7 @@ def cleanup_old_doing_folders():
         return
     
     # Calculate cutoff date (8 hours ago)
-    cutoff_date = datetime.datetime.now() - datetime.timedelta(hours=8)
+    cutoff_date = datetime.now() - datetime.timedelta(hours=8)
     
     try:
         for item in os.listdir(DOING_DIR):
@@ -572,7 +581,7 @@ def cleanup_old_doing_folders():
             if os.path.isdir(item_path):
                 try:
                     # Parse timestamp from folder name (format: YYYY-MM-DD_HH-MM-SS)
-                    folder_time = datetime.datetime.strptime(item, "%Y-%m-%d_%H-%M-%S")
+                    folder_time = datetime.strptime(item, "%Y-%m-%d_%H-%M-%S")
                     
                     # Delete if older than cutoff
                     if folder_time < cutoff_date:
@@ -932,7 +941,7 @@ def create_profile(
             "description": description or f"Custom voice profile - {display_name}",
             "path": str(profile_dir),
             "is_default": False,
-            "created_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         
         save_profiles(profiles)
@@ -1110,7 +1119,7 @@ def synthesize_speech_v2(
         )
         
         # Return audio file
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"vietnamese_speech_v2_{active_profile}_{timestamp}.wav"
         return FileResponse(
             final_audio_path,
@@ -1141,7 +1150,1162 @@ def synthesize_speech_v2(
         process_controller.reset()
 
 
+# === SEGMENT TTS API ENDPOINTS === #
+
+# Sessions storage with persistent JSON database
+SEGMENTS_DB_FILE = "/data/segments_sessions.json"
+
+def load_segment_sessions():
+    """Load sessions from JSON database"""
+    if os.path.exists(SEGMENTS_DB_FILE):
+        try:
+            with open(SEGMENTS_DB_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"[WARN] Failed to load sessions database: {e}")
+    return {}
+
+def save_segment_sessions(sessions):
+    """Save sessions to JSON database"""
+    try:
+        os.makedirs(os.path.dirname(SEGMENTS_DB_FILE), exist_ok=True)
+        with open(SEGMENTS_DB_FILE, 'w', encoding='utf-8') as f:
+            json.dump(sessions, f, indent=2, ensure_ascii=False)
+    except IOError as e:
+        print(f"[ERROR] Failed to save sessions database: {e}")
+
+def cleanup_expired_sessions():
+    """Remove sessions older than 7 days"""
+    sessions = load_segment_sessions()
+    current_time = datetime.now()
+    expired_sessions = []
+    
+    for session_id, session in sessions.items():
+        try:
+            created_at = datetime.fromisoformat(session['created_at'])
+            if (current_time - created_at).days > 7:
+                expired_sessions.append(session_id)
+        except Exception:
+            expired_sessions.append(session_id)  # Invalid date format
+    
+    for session_id in expired_sessions:
+        # Clean up files
+        segment_dir = f"{DATA_DIR}/segments/{session_id}"
+        if os.path.exists(segment_dir):
+            shutil.rmtree(segment_dir, ignore_errors=True)
+        del sessions[session_id]
+        print(f"[CLEANUP] Expired session {session_id}")
+    
+    if expired_sessions:
+        save_segment_sessions(sessions)
+    
+    return len(expired_sessions)
+
+# Load sessions on startup - skip cleanup for now
+segment_sessions = load_segment_sessions()
+print("[STARTUP] Loaded segment sessions, skipping cleanup")
+
+class SegmentSession(BaseModel):
+    session_id: str
+    text: str
+    segment_length: int
+    segments: List[Dict]
+    profile_id: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+class SegmentRequest(BaseModel):
+    text: str
+    segment_length: int = 50
+    profile_id: Optional[str] = None
+    session_id: Optional[str] = None
+
+@app.post("/api/segment/create_session")
+async def create_segment_session_simple(data: dict):
+    """Create a new segment session - SIMPLIFIED VERSION"""
+    try:
+        session_id = str(uuid.uuid4())
+        
+        # Extract parameters from data
+        text = data.get("text", "").strip()
+        segment_length = data.get("segment_length", 50)
+        profile_id = data.get("profile_id", None)
+        
+        if not text:
+            raise HTTPException(400, "Text is required")
+        
+        # Split text into segments intelligently (by sentences and length)
+        segments = []
+        
+        # First split by sentences using Vietnamese punctuation
+        sentences = split_vietnamese_sentences(text)
+        
+        # Group sentences into segments of appropriate length
+        current_segment = ""
+        segment_id = 0
+        
+        for sentence in sentences:
+            # If adding this sentence would exceed limit, save current segment
+            if len(current_segment) + len(sentence) > segment_length and current_segment:
+                segments.append({
+                    "id": segment_id,
+                    "text": current_segment.strip(),
+                    "status": "pending",
+                    "audio_path": None,
+                    "generated_at": None,
+                    "character_count": len(current_segment.strip()),
+                    "word_count": len(current_segment.strip().split())
+                })
+                segment_id += 1
+                current_segment = sentence + " "
+            else:
+                current_segment += sentence + " "
+        
+        # Add final segment if exists
+        if current_segment.strip():
+            segments.append({
+                "id": segment_id,
+                "text": current_segment.strip(),
+                "status": "pending",
+                "audio_path": None,
+                "generated_at": None,
+                "character_count": len(current_segment.strip()),
+                "word_count": len(current_segment.strip().split())
+            })
+        
+        # Create session
+        now = datetime.now().isoformat()
+        session = SegmentSession(
+            session_id=session_id,
+            text=text,
+            segment_length=segment_length,
+            segments=segments,
+            profile_id=profile_id,
+            created_at=now,
+            updated_at=now
+        )
+        
+        segment_sessions[session_id] = session.dict()
+        save_segment_sessions(segment_sessions)
+        
+        print(f"[SEGMENT] Created session {session_id} with {len(segments)} segments")
+        
+        return {
+            "session_id": session_id,
+            "segments_count": len(segments),
+            "total_characters": len(text),
+            "segments": segments
+        }
+        
+    except Exception as e:
+        error_msg = f"Failed to create segment session: {str(e)}"
+        print(f"[ERROR] {error_msg}")
+        raise HTTPException(500, error_msg)
+
+@app.get("/api/segment/session/{session_id}")
+async def get_segment_session(session_id: str):
+    """Get segment session details"""
+    sessions = load_segment_sessions()
+    if session_id not in sessions:
+        raise HTTPException(404, "Session not found")
+    
+    return sessions[session_id]
+
+@app.get("/api/segment/sessions")
+async def list_segment_sessions():
+    """List all segment sessions with summary"""
+    sessions = load_segment_sessions()
+    session_list = []
+    
+    for session_id, session in sessions.items():
+        segments_count = len(session.get('segments', []))
+        generated_count = len([s for s in session.get('segments', []) if s.get('status') == 'generated'])
+        
+        session_list.append({
+            "session_id": session_id,
+            "text_preview": session.get('text', '')[:50] + '...' if len(session.get('text', '')) > 50 else session.get('text', ''),
+            "segments_count": segments_count,
+            "generated_count": generated_count,
+            "completion_rate": f"{generated_count}/{segments_count}" if segments_count > 0 else "0/0",
+            "created_at": session.get('created_at'),
+            "updated_at": session.get('updated_at'),
+            "profile_id": session.get('profile_id', 'default'),
+            "segment_length": session.get('segment_length', 50)
+        })
+    
+    # Sort by updated_at descending
+    session_list.sort(key=lambda x: x.get('updated_at', ''), reverse=True)
+    
+    return {
+        "sessions": session_list,
+        "total_sessions": len(session_list)
+    }
+
+@app.put("/api/segment/update/{session_id}/{segment_id}")
+async def update_segment_text(session_id: str, segment_id: int, text: str = Form(...)):
+    """Update segment text and mark for regeneration if changed"""
+    try:
+        sessions = load_segment_sessions()
+        if session_id not in sessions:
+            raise HTTPException(404, "Session not found")
+        
+        session = sessions[session_id]
+        
+        if segment_id >= len(session["segments"]):
+            raise HTTPException(404, "Segment not found")
+        
+        segment = session["segments"][segment_id]
+        old_text = segment["text"]
+        
+        # Check if text actually changed
+        if old_text.strip() == text.strip():
+            return {"message": "No changes detected"}
+        
+        # Update segment
+        segment["text"] = text.strip()
+        segment["status"] = "pending"  # Mark for regeneration
+        segment["audio_path"] = None
+        segment["generated_at"] = None
+        segment["text_changed"] = True
+        session["updated_at"] = datetime.now().isoformat()
+        
+        # Calculate text hash for smart caching
+        import hashlib
+        segment["text_hash"] = hashlib.md5(text.strip().encode('utf-8')).hexdigest()
+        
+        sessions[session_id] = session
+        save_segment_sessions(sessions)
+        
+        print(f"[SEGMENT] Updated text for segment {segment_id} in session {session_id}")
+        
+        return {
+            "message": "Segment text updated",
+            "segment_id": segment_id,
+            "status": "pending",
+            "text_hash": segment["text_hash"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = f"Failed to update segment text: {str(e)}"
+        print(f"[ERROR] {error_msg}")
+        raise HTTPException(500, error_msg)
+
+@app.post("/api/segment/check_cache/{session_id}")
+async def check_segment_cache(session_id: str):
+    """Check which segments can be served from cache"""
+    try:
+        sessions = load_segment_sessions()
+        if session_id not in sessions:
+            raise HTTPException(404, "Session not found")
+        
+        session = sessions[session_id]
+        cache_status = []
+        
+        for segment in session["segments"]:
+            segment_id = segment["id"]
+            audio_path = f"{DATA_DIR}/segments/{session_id}/segment_{segment_id}.wav"
+            
+            status = {
+                "segment_id": segment_id,
+                "text": segment["text"],
+                "has_audio": os.path.exists(audio_path) if segment.get("audio_path") else False,
+                "status": segment["status"],
+                "cached": segment["status"] == "generated" and os.path.exists(audio_path) if segment.get("audio_path") else False,
+                "text_hash": segment.get("text_hash", "")
+            }
+            cache_status.append(status)
+        
+        return {
+            "cache_status": cache_status,
+            "total_cached": len([s for s in cache_status if s["cached"]]),
+            "total_segments": len(cache_status)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = f"Failed to check cache: {str(e)}"
+        print(f"[ERROR] {error_msg}")
+        raise HTTPException(500, error_msg)
+
+@app.post("/clear_segment_cache")
+async def clear_segment_cache(session_id: str, segment_index: int):
+    """Clear cached audio for specific segment"""
+    try:
+        sessions = load_segment_sessions()
+        if session_id not in sessions:
+            raise HTTPException(404, "Session not found")
+        
+        if segment_index >= len(sessions[session_id]["segments"]):
+            raise HTTPException(404, "Segment not found")
+        
+        segment = sessions[session_id]["segments"][segment_index]
+        
+        # Clear audio file if exists
+        if segment.get("audio_path") and os.path.exists(segment["audio_path"]):
+            os.remove(segment["audio_path"])
+            print(f"[CACHE] Cleared audio file: {segment['audio_path']}")
+        
+        # Update segment status
+        segment["status"] = "pending"
+        segment["audio_path"] = None
+        segment["generated_at"] = None
+        
+        save_segment_sessions(sessions)
+        
+        return {"message": "Cache cleared successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = f"Failed to clear cache: {str(e)}"
+        print(f"[ERROR] {error_msg}")
+        raise HTTPException(500, error_msg)
+
+@app.get("/export_session/{session_id}")
+async def export_session(session_id: str):
+    """Export session data for backup/sharing"""
+    try:
+        sessions = load_segment_sessions()
+        if session_id not in sessions:
+            raise HTTPException(404, "Session not found")
+        
+        session = sessions[session_id]
+        export_data = {
+            "session_id": session_id,
+            "name": session["name"],
+            "profile_id": session["profile_id"],
+            "original_text": session["original_text"],
+            "segments": [
+                {
+                    "id": seg["id"],
+                    "text": seg["text"],
+                    "status": seg["status"]
+                }
+                for seg in session["segments"]
+            ],
+            "created_at": session["created_at"],
+            "export_version": "1.0"
+        }
+        
+        return export_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = f"Failed to export session: {str(e)}"
+        print(f"[ERROR] {error_msg}")
+        raise HTTPException(500, error_msg)
+
+@app.post("/import_session")
+async def import_session(import_data: dict):
+    """Import session data from backup"""
+    try:
+        sessions = load_segment_sessions()
+        
+        # Generate new session ID to avoid conflicts
+        new_session_id = f"imported_{int(time.time())}"
+        
+        session = {
+            "id": new_session_id,
+            "name": f"[IMPORTED] {import_data['name']}",
+            "profile_id": import_data.get("profile_id", DEFAULT_PROFILE),
+            "original_text": import_data["original_text"],
+            "segments": [
+                {
+                    "id": seg["id"],
+                    "text": seg["text"],
+                    "status": "pending",  # Reset status on import
+                    "audio_path": None,
+                    "generated_at": None
+                }
+                for seg in import_data["segments"]
+            ],
+            "created_at": datetime.now().isoformat(),
+            "last_modified": datetime.now().isoformat()
+        }
+        
+        # Create session directory
+        session_dir = f"{DATA_DIR}/segments/{new_session_id}"
+        os.makedirs(session_dir, exist_ok=True)
+        
+        sessions[new_session_id] = session
+        save_segment_sessions(sessions)
+        
+        return {
+            "message": "Session imported successfully",
+            "session_id": new_session_id,
+            "total_segments": len(session["segments"])
+        }
+        
+    except Exception as e:
+        error_msg = f"Failed to import session: {str(e)}"
+        print(f"[ERROR] {error_msg}")
+        raise HTTPException(500, error_msg)
+
+@app.post("/api/segment/generate/{session_id}/{segment_id}")
+async def generate_segment(session_id: str, segment_id: int):
+    """Generate audio for a specific segment - SIMPLE VERSION"""
+    try:
+        # Load session
+        sessions = load_segment_sessions()
+        if session_id not in sessions:
+            raise HTTPException(404, "Session not found")
+        
+        session = sessions[session_id]
+        if segment_id >= len(session["segments"]):
+            raise HTTPException(404, "Segment not found")
+        
+        segment = session["segments"][segment_id]
+        profile_id = session.get("profile_id", DEFAULT_PROFILE)
+        
+        print(f"[SIMPLE] Generating segment {segment_id} with text: {segment['text'][:50]}...")
+        
+        # Update status to processing
+        segment["status"] = "processing"
+        save_segment_sessions(sessions)
+        
+        # Use existing synthesize_speech_v2 function (it works!)
+        try:
+            # Create a temporary file for this segment
+            temp_audio_file = await synthesize_speech_v2(
+                text=segment["text"], 
+                profile_id=profile_id
+            )
+            
+            if not temp_audio_file or not os.path.exists(temp_audio_file):
+                raise Exception("Failed to generate audio file")
+            
+            # Create permanent storage for this session
+            session_dir = f"{DATA_DIR}/segments/{session_id}"
+            os.makedirs(session_dir, exist_ok=True)
+            
+            # Copy to permanent location
+            final_path = f"{session_dir}/segment_{segment_id}.wav"
+            import shutil
+            shutil.copy2(temp_audio_file, final_path)
+            
+            # Update segment status
+            segment["status"] = "generated"
+            segment["audio_path"] = final_path
+            segment["generated_at"] = datetime.now().isoformat()
+            
+            save_segment_sessions(sessions)
+            
+            print(f"[SUCCESS] Generated segment {segment_id}: {final_path}")
+            
+            return {
+                "success": True,
+                "segment_id": segment_id,
+                "audio_url": f"/api/segment/audio/{session_id}/{segment_id}",
+                "status": "generated"
+            }
+            
+        except Exception as e:
+            segment["status"] = "error"
+            segment["error"] = str(e)
+            save_segment_sessions(sessions)
+            raise e
+            
+    except Exception as e:
+        print(f"[ERROR] Segment generation failed: {str(e)}")
+        raise HTTPException(500, f"Failed to generate segment: {str(e)}")
+
+@app.post("/api/segment/generate_old/{session_id}/{segment_id}")
+async def generate_segment_simple(session_id: str, segment_id: int):
+    """Generate audio for a specific segment"""
+    try:
+        sessions = load_segment_sessions()
+        if session_id not in sessions:
+            raise HTTPException(404, "Session not found")
+        
+        session = sessions[session_id]
+        
+        if segment_id >= len(session["segments"]):
+            raise HTTPException(404, "Segment not found")
+        
+        segment = session["segments"][segment_id]
+        
+        # Update segment status
+        segment["status"] = "processing"
+        session["updated_at"] = datetime.now().isoformat()
+        sessions[session_id] = session
+        save_segment_sessions(sessions)
+        
+        print(f"[SEGMENT] Processing segment {segment_id} in session {session_id}")
+        
+        # Use existing TTS logic (reuse vietnamese_sentence_inference)
+        profile_id = session.get("profile_id") or DEFAULT_PROFILE
+        
+        # Validate profile exists
+        profiles = load_profiles()
+        if profile_id not in profiles:
+            raise HTTPException(404, f"Profile '{profile_id}' not found")
+        
+        profile_data = profiles[profile_id]
+        
+        # Create temporary working directory for this segment
+        timestamp = int(time.time())
+        doing_dir = f"{DOING_DIR}/segment_{session_id}_{segment_id}_{timestamp}"
+        os.makedirs(doing_dir, exist_ok=True)
+        
+        try:
+            # Generate audio for the segment
+            segment_audio_path = f"{doing_dir}/segment_{segment_id}.wav"
+            
+            # Prepare single segment processing (reuse existing logic)
+            # Step 1: Get profile files
+            profile_dir = Path(profile_data["path"])
+            sample_txt_path = profile_dir / "sample.txt"
+            sample_wav_path = profile_dir / "sample.wav"
+            
+            # Validate profile files
+            if not sample_txt_path.exists() or not sample_wav_path.exists():
+                raise HTTPException(400, f"Profile '{profile_id}' is missing required files")
+            
+            # Step 2: Read prompt text
+            with open(sample_txt_path, "r", encoding="utf-8") as f:
+                prompt_text = clean_vietnamese_text(f.read())
+            
+            # Step 3: Convert sample audio to 24kHz mono
+            prompt_wav_24k = ensure_prompt_wav(str(sample_wav_path), doing_dir)
+            
+            # Step 4: Create TSV for single segment
+            tsv_path = build_vietnamese_tsv(doing_dir, prompt_text, prompt_wav_24k, [segment["text"]])
+            
+            # Step 5: Run inference
+            vietnamese_sentence_inference(doing_dir, tsv_path, 1)
+            
+            # Step 6: Find generated audio
+            generated_files = [f for f in os.listdir(doing_dir) if f.endswith('.wav') and 'seg_000' in f]
+            
+            if generated_files:
+                # Move to permanent storage
+                segment_storage_dir = f"{DATA_DIR}/segments/{session_id}"
+                os.makedirs(segment_storage_dir, exist_ok=True)
+                
+                generated_path = f"{doing_dir}/{generated_files[0]}"
+                final_path = f"{segment_storage_dir}/segment_{segment_id}.wav"
+                shutil.move(generated_path, final_path)
+                
+                # Update segment info
+                segment["status"] = "generated"
+                segment["audio_path"] = final_path
+                segment["generated_at"] = datetime.now().isoformat()
+                sessions[session_id] = session
+                save_segment_sessions(sessions)
+                
+                print(f"[SEGMENT] Generated segment {segment_id} in session {session_id}")
+                
+                return {
+                    "segment_id": segment_id,
+                    "status": "generated",
+                    "audio_path": final_path,
+                    "generated_at": segment["generated_at"]
+                }
+                
+            else:
+                segment["status"] = "error"
+                raise Exception("No audio files generated for segment")
+                
+        finally:
+            # Clean up temporary directory
+            if os.path.exists(doing_dir):
+                shutil.rmtree(doing_dir, ignore_errors=True)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Update segment status to error
+        sessions = load_segment_sessions()
+        if session_id in sessions:
+            session = sessions[session_id]
+            if segment_id < len(session["segments"]):
+                session["segments"][segment_id]["status"] = "error"
+                sessions[session_id] = session
+                save_segment_sessions(sessions)
+        
+        error_msg = f"Failed to generate segment {segment_id}: {str(e)}"
+        print(f"[ERROR] {error_msg}")
+        raise HTTPException(500, error_msg)
+
+@app.get("/api/segment/audio/{session_id}/{segment_id}")
+async def get_segment_audio(session_id: str, segment_id: int):
+    """Get audio file for a specific segment"""
+    sessions = load_segment_sessions()
+    if session_id not in sessions:
+        raise HTTPException(404, "Session not found")
+    
+    session = sessions[session_id]
+    
+    if segment_id >= len(session["segments"]):
+        raise HTTPException(404, "Segment not found")
+    
+    segment = session["segments"][segment_id]
+    
+    if segment["status"] != "generated" or not segment["audio_path"]:
+        raise HTTPException(404, "Segment audio not available")
+    
+    if not os.path.exists(segment["audio_path"]):
+        raise HTTPException(404, "Audio file not found")
+    
+    return FileResponse(
+        segment["audio_path"],
+        media_type="audio/wav",
+        filename=f"segment_{segment_id}.wav"
+    )
+
+@app.post("/api/segment/merge/{session_id}")
+async def merge_segments(session_id: str):
+    """Merge all generated segments into a single audio file"""
+    try:
+        sessions = load_segment_sessions()
+        if session_id not in sessions:
+            raise HTTPException(404, "Session not found")
+        
+        session = sessions[session_id]
+        generated_segments = [s for s in session["segments"] if s["status"] == "generated" and s["audio_path"]]
+        
+        if not generated_segments:
+            raise HTTPException(400, "No generated segments to merge")
+        
+        print(f"[SEGMENT] Merging {len(generated_segments)} segments in session {session_id}")
+        
+        # Merge audio files
+        merged_audio = []
+        sample_rate = 24000  # Default sample rate
+        
+        for segment in generated_segments:
+            if os.path.exists(segment["audio_path"]):
+                audio_data, sr = sf.read(segment["audio_path"])
+                merged_audio.extend(audio_data)
+                
+                # Add pause between segments (0.5 seconds)
+                pause_samples = int(0.5 * sr)
+                merged_audio.extend([0.0] * pause_samples)
+                
+                sample_rate = sr
+        
+        if merged_audio:
+            # Save merged audio
+            merged_dir = f"{DATA_DIR}/segments/{session_id}"
+            os.makedirs(merged_dir, exist_ok=True)
+            
+            merged_path = f"{merged_dir}/merged_audio.wav"
+            sf.write(merged_path, np.array(merged_audio), sample_rate)
+            
+            print(f"[SEGMENT] Merged audio saved to {merged_path}")
+            
+            return FileResponse(
+                merged_path,
+                media_type="audio/wav",
+                filename=f"merged_segments_{session_id}.wav"
+            )
+        else:
+            raise HTTPException(500, "Failed to merge segments")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = f"Failed to merge segments: {str(e)}"
+        print(f"[ERROR] {error_msg}")
+        raise HTTPException(500, error_msg)
+
+@app.delete("/api/segment/session/{session_id}")
+async def delete_segment_session(session_id: str):
+    """Delete a segment session and its files"""
+    try:
+        sessions = load_segment_sessions()
+        if session_id not in sessions:
+            raise HTTPException(404, "Session not found")
+        
+        # Clean up files
+        segment_dir = f"{DATA_DIR}/segments/{session_id}"
+        if os.path.exists(segment_dir):
+            shutil.rmtree(segment_dir, ignore_errors=True)
+        
+        # Remove from database
+        del sessions[session_id]
+        save_segment_sessions(sessions)
+        
+        print(f"[SEGMENT] Deleted session {session_id}")
+        
+        return {"message": "Session deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = f"Failed to delete session: {str(e)}"
+        print(f"[ERROR] {error_msg}")
+        raise HTTPException(500, error_msg)
+
+
+# Auto-cleanup functions
+def cleanup_expired_sessions():
+    """Remove sessions older than SESSION_EXPIRY_DAYS"""
+    try:
+        sessions = load_segment_sessions()
+        current_time = datetime.now()
+        expired_sessions = []
+        
+        for session_id, session in sessions.items():
+            created_at = datetime.fromisoformat(session.get('created_at', '2024-01-01T00:00:00'))
+            if current_time - created_at > timedelta(days=SESSION_EXPIRY_DAYS):
+                expired_sessions.append(session_id)
+                # Clean up session files
+                session_dir = f"{DATA_DIR}/segments/{session_id}"
+                if os.path.exists(session_dir):
+                    import shutil
+                    shutil.rmtree(session_dir)
+                    print(f"[CLEANUP] Removed session directory: {session_dir}")
+        
+        # Remove from database
+        for session_id in expired_sessions:
+            del sessions[session_id]
+        
+        if expired_sessions:
+            save_segment_sessions(sessions)
+            print(f"[CLEANUP] Removed {len(expired_sessions)} expired sessions")
+        
+    except Exception as e:
+        print(f"[ERROR] Cleanup failed: {e}")
+
+def cleanup_temp_files():
+    """Remove temporary files older than TEMP_FILE_EXPIRY_HOURS"""
+    try:
+        current_time = time.time()
+        temp_dirs = [DOING_DIR]
+        
+        for temp_dir in temp_dirs:
+            if not os.path.exists(temp_dir):
+                continue
+                
+            for item in os.listdir(temp_dir):
+                item_path = os.path.join(temp_dir, item)
+                
+                # Check if file/directory is old enough
+                if os.path.isfile(item_path) or os.path.isdir(item_path):
+                    creation_time = os.path.getctime(item_path)
+                    age_hours = (current_time - creation_time) / 3600
+                    
+                    if age_hours > TEMP_FILE_EXPIRY_HOURS:
+                        if os.path.isdir(item_path):
+                            import shutil
+                            shutil.rmtree(item_path)
+                        else:
+                            os.remove(item_path)
+                        print(f"[CLEANUP] Removed old temp file: {item_path}")
+                        
+    except Exception as e:
+        print(f"[ERROR] Temp cleanup failed: {e}")
+
+def run_periodic_cleanup():
+    """Run cleanup tasks periodically"""
+    while True:
+        time.sleep(CLEANUP_INTERVAL_HOURS * 3600)  # Convert hours to seconds
+        print("[CLEANUP] Starting periodic cleanup...")
+        cleanup_expired_sessions()
+        cleanup_temp_files()
+        print("[CLEANUP] Periodic cleanup completed")
+
+# Start cleanup thread on startup - DISABLED FOR NOW
+# cleanup_thread = threading.Thread(target=run_periodic_cleanup, daemon=True)
+# cleanup_thread.start()
+print(f"[STARTUP] Backend starting without cleanup (will be re-enabled later)")
+
 # === APPLICATION STARTUP === #
+
+async def generate_audio_segment(text: str, profile_id: str, output_path: str):
+    """Generate audio for a single segment"""
+    try:
+        # Use default profile if not specified
+        if not profile_id:
+            profile_id = "tina"
+        
+        # Prepare profile path
+        profile_path = f"/data/{profile_id}/sample.wav"
+        if not os.path.exists(profile_path):
+            profile_path = "/data/tina/sample.wav"  # fallback
+        
+        if not os.path.exists(profile_path):
+            return {"success": False, "error": "Profile not found"}
+        
+        # Create TSV file for inference
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.tsv', delete=False) as tsv_file:
+            tsv_file.write(f"segment\t{text}\t{profile_path}\t{text}\n")
+            tsv_path = tsv_file.name
+        
+        # Create output directory
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        # Run ZipVoice inference
+        cmd = [
+            "python3", "-m", "zipvoice.bin.infer_zipvoice",
+            "--model-name", "zipvoice",
+            "--model-dir", "/models/zipvoice_vi",
+            "--checkpoint-name", "iter-525000-avg-2.pt",
+            "--tokenizer", "espeak",
+            "--lang", "vi",
+            "--test-list", tsv_path,
+            "--res-dir", "/tmp/zipvoice_output"
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, cwd="/ZipVoice")
+        
+        # Move generated file to final location
+        temp_output = "/tmp/zipvoice_output/segment.wav"
+        if os.path.exists(temp_output):
+            import shutil
+            shutil.move(temp_output, output_path)
+            
+            # Cleanup
+            os.unlink(tsv_path)
+            
+            return {"success": True, "duration": 2.0}
+        else:
+            print(f"[ERROR] ZipVoice output not found: {temp_output}")
+            print(f"[STDERR] {result.stderr}")
+            return {"success": False, "error": "Generation failed"}
+            
+    except Exception as e:
+        print(f"[ERROR] Audio generation failed: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/create_simple_session")
+async def create_simple_session(request: Request):
+    """Create a simple segment session - WORKING VERSION"""
+    try:
+        data = await request.json()
+        
+        session_id = str(uuid.uuid4())
+        text = data.get("text", "").strip()
+        segment_length = int(data.get("segment_length", 50))
+        profile_id = data.get("profile_id")
+        
+        if not text:
+            raise HTTPException(400, "Text is required")
+        
+        # Vietnamese-aware segment splitting (by words, not characters)
+        segments = []
+        segment_id = 0
+        
+        # Split by sentences first (Vietnamese punctuation)
+        import re
+        sentences = re.split(r'[.!?…]+\s*|\n+', text.strip())
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        current_segment = ""
+        current_word_count = 0
+        
+        for sentence in sentences:
+            sentence_words = sentence.split()
+            
+            # If adding this sentence would exceed word limit and we have content
+            if current_word_count + len(sentence_words) > segment_length and current_segment:
+                # Save current segment
+                segments.append({
+                    "id": segment_id,
+                    "text": current_segment.strip(),
+                    "status": "pending",
+                    "audio_path": None,
+                    "generated_at": None
+                })
+                segment_id += 1
+                current_segment = sentence + ". "
+                current_word_count = len(sentence_words)
+            else:
+                # Add sentence to current segment
+                current_segment += sentence + ". "
+                current_word_count += len(sentence_words)
+        
+        # Add final segment
+        if current_segment.strip():
+            segments.append({
+                "id": segment_id,
+                "text": current_segment.strip(),
+                "status": "pending", 
+                "audio_path": None,
+                "generated_at": None
+            })
+        
+        # Save session
+        session_data = {
+            "session_id": session_id,
+            "text": text,
+            "segment_length": segment_length,
+            "segments": segments,
+            "profile_id": profile_id,
+            "created_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat()
+        }
+        
+        segment_sessions[session_id] = session_data
+        save_segment_sessions(segment_sessions)
+        
+        print(f"[SUCCESS] Created session {session_id} with {len(segments)} segments")
+        
+        return {
+            "session_id": session_id,
+            "segments": segments,
+            "segments_count": len(segments),
+            "profile_id": profile_id or "default"
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Session creation failed: {str(e)}")
+        raise HTTPException(500, str(e))
+
+@app.get("/audio/{session_id}/{segment_id}")
+async def serve_segment_audio(session_id: str, segment_id: int):
+    """Serve audio file for a segment"""
+    audio_path = f"/data/segments/audio/segment_{session_id}_{segment_id}.wav"
+    if os.path.exists(audio_path):
+        return FileResponse(audio_path, media_type="audio/wav")
+    else:
+        raise HTTPException(404, "Audio file not found")
+
+@app.get("/audio/{session_id}/{segment_id}")
+async def serve_segment_audio(session_id: str, segment_id: int):
+    """Serve audio file for a specific segment"""
+    try:
+        audio_filename = f"segment_{session_id}_{segment_id}.wav"
+        audio_path = f"/data/segments/audio/{audio_filename}"
+        
+        if not os.path.exists(audio_path):
+            raise HTTPException(404, "Audio file not found")
+        
+        from fastapi.responses import FileResponse
+        return FileResponse(
+            audio_path,
+            media_type="audio/wav", 
+            filename=audio_filename
+        )
+        
+    except Exception as e:
+        print(f"[ERROR] Serving audio failed: {str(e)}")
+        raise HTTPException(500, str(e))
+
+@app.post("/merge_all_segments/{session_id}")
+async def merge_all_segments(session_id: str):
+    """Merge all completed segments into one audio file"""
+    try:
+        if session_id not in segment_sessions:
+            raise HTTPException(404, "Session not found")
+        
+        session = segment_sessions[session_id]
+        completed_segments = [s for s in session["segments"] if s["status"] == "completed"]
+        
+        if not completed_segments:
+            raise HTTPException(400, "No completed segments to merge")
+        
+        # Create merged audio file
+        merged_filename = f"merged_{session_id}.wav"
+        merged_path = f"/data/segments/audio/{merged_filename}"
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(merged_path), exist_ok=True)
+        
+        # Use pydub to merge audio files
+        from pydub import AudioSegment
+        merged_audio = AudioSegment.empty()
+        
+        print(f"[MERGE] Starting merge for session {session_id} with {len(completed_segments)} segments")
+        
+        for segment in sorted(completed_segments, key=lambda x: x["id"]):
+            segment_file = f"/data/segments/audio/segment_{session_id}_{segment['id']}.wav"
+            print(f"[MERGE] Processing segment {segment['id']}: {segment_file}")
+            
+            if os.path.exists(segment_file):
+                try:
+                    audio = AudioSegment.from_wav(segment_file)
+                    merged_audio += audio
+                    # Add small pause between segments
+                    merged_audio += AudioSegment.silent(duration=500)  # 0.5 seconds
+                    print(f"[MERGE] Added segment {segment['id']} successfully")
+                except Exception as e:
+                    print(f"[ERROR] Failed to add segment {segment['id']}: {e}")
+                    continue
+            else:
+                print(f"[WARNING] Segment file not found: {segment_file}")
+        
+        if len(merged_audio) == 0:
+            raise HTTPException(400, "No valid audio segments found to merge")
+        
+        # Export merged audio
+        merged_audio.export(merged_path, format="wav")
+        print(f"[MERGE] Successfully created merged file: {merged_path}")
+        
+        return {
+            "success": True,
+            "merged_file": merged_filename,
+            "segments_merged": len(completed_segments),
+            "audio_url": f"/audio/merged/{session_id}",
+            "file_path": merged_path
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Merge segments failed: {str(e)}")
+        raise HTTPException(500, str(e))
+
+@app.get("/audio/merged/{session_id}")
+async def serve_merged_audio(session_id: str):
+    """Serve merged audio file"""
+    try:
+        merged_filename = f"merged_{session_id}.wav"
+        merged_path = f"/data/segments/audio/{merged_filename}"
+        
+        if not os.path.exists(merged_path):
+            raise HTTPException(404, "Merged audio file not found")
+        
+        from fastapi.responses import FileResponse
+        return FileResponse(
+            merged_path,
+            media_type="audio/wav",
+            filename=merged_filename
+        )
+        
+    except Exception as e:
+        print(f"[ERROR] Serving merged audio failed: {str(e)}")
+        raise HTTPException(500, str(e))
+
+@app.post("/generate_simple_segment/{session_id}/{segment_id}")
+async def generate_simple_segment(session_id: str, segment_id: int):
+    """Generate audio for one segment - WORKING VERSION"""
+    try:
+        if session_id not in segment_sessions:
+            raise HTTPException(404, "Session not found")
+        
+        session = segment_sessions[session_id]
+        
+        # Find segment
+        segment = None
+        for seg in session["segments"]:
+            if seg["id"] == segment_id:
+                segment = seg
+                break
+        
+        if not segment:
+            raise HTTPException(404, "Segment not found")
+        
+        if segment["status"] == "completed":
+            return {"status": "already_completed", "audio_path": segment["audio_path"]}
+        
+        # Mark as generating
+        segment["status"] = "generating"
+        save_segment_sessions(segment_sessions)
+        
+        text = segment["text"]
+        profile_id = session.get("profile_id", "tina")
+        
+        print(f"[GENERATE] Session {session_id}, Segment {segment_id}: '{text}'")
+        
+        # Create output file
+        output_filename = f"segment_{session_id}_{segment_id}.wav"
+        output_path = f"/data/segments/audio/{output_filename}"
+        
+        # Generate audio using ZipVoice
+        result = await generate_audio_segment(text, profile_id, output_path)
+        
+        if result.get("success"):
+            # Update segment
+            segment["status"] = "completed"
+            segment["audio_path"] = output_path
+            segment["generated_at"] = datetime.now().isoformat()
+            save_segment_sessions(segment_sessions)
+            
+            print(f"[SUCCESS] Generated segment {segment_id} -> {output_path}")
+            
+            return {
+                "status": "completed",
+                "audio_path": output_path,
+                "text": text,
+                "duration": result.get("duration", 0)
+            }
+        else:
+            segment["status"] = "error"
+            save_segment_sessions(segment_sessions)
+            raise HTTPException(500, result.get("error", "Generation failed"))
+            
+    except Exception as e:
+        print(f"[ERROR] Segment generation failed: {str(e)}")
+        # Mark segment as error
+        if 'segment' in locals():
+            segment["status"] = "error"
+            save_segment_sessions(segment_sessions)
+        raise HTTPException(500, str(e))
+
+@app.post("/update_segment/{session_id}/{segment_id}")
+async def update_segment(session_id: str, segment_id: int, new_text: str = Form(...)):
+    """Update segment text and regenerate only that segment"""
+    try:
+        if session_id not in segment_sessions:
+            raise HTTPException(404, "Session not found")
+        
+        session = segment_sessions[session_id]
+        
+        # Find segment
+        segment = None
+        for seg in session["segments"]:
+            if seg["id"] == segment_id:
+                segment = seg
+                break
+        
+        if not segment:
+            raise HTTPException(404, "Segment not found")
+        
+        # Update text
+        old_text = segment["text"]
+        segment["text"] = new_text.strip()
+        
+        print(f"[UPDATE] Session {session_id}, Segment {segment_id}: '{old_text}' -> '{new_text}'")
+        
+        # If text unchanged, don't regenerate
+        if old_text == segment["text"]:
+            return {
+                "status": "unchanged",
+                "text": segment["text"],
+                "audio_path": segment.get("audio_path")
+            }
+        
+        # Mark segment for regeneration
+        segment["status"] = "generating"
+        save_segment_sessions(segment_sessions)
+        
+        # Generate audio for this segment only
+        profile_id = session.get("profile_id", "tina")
+        
+        # Create output file
+        output_filename = f"segment_{session_id}_{segment_id}.wav"
+        output_path = f"/data/segments/audio/{output_filename}"
+        
+        # Generate audio using ZipVoice
+        result = await generate_audio_segment(segment["text"], profile_id, output_path)
+        
+        if result.get("success"):
+            # Update segment
+            segment["status"] = "completed"
+            segment["audio_path"] = output_path
+            segment["generated_at"] = datetime.now().isoformat()
+            save_segment_sessions(segment_sessions)
+            
+            print(f"[REGENERATE] Successfully updated segment {segment_id}")
+            
+            return {
+                "status": "completed",
+                "text": segment["text"],
+                "audio_path": output_path,
+                "duration": result.get("duration", 0)
+            }
+        else:
+            segment["status"] = "error"
+            save_segment_sessions(segment_sessions)
+            raise HTTPException(500, result.get("error", "Regeneration failed"))
+            
+    except Exception as e:
+        print(f"[ERROR] Segment update failed: {str(e)}")
+        raise HTTPException(500, str(e))
 
 if __name__ == "__main__":
     import uvicorn

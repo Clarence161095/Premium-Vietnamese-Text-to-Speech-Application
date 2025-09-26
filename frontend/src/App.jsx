@@ -1,322 +1,134 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
+import ClassicTTS from './ClassicTTS';
 
 // === LANGUAGE SYSTEM === //
-
 const translations = {
   vi: {
-    // Header
     title: "Premium Vietnamese TTS",
     subtitle: "Tạo giọng nói tiếng Việt chất lượng cao với công nghệ AI hiện đại",
-
-    // Theme & Language
     darkMode: "Chế độ tối",
     lightMode: "Chế độ sáng",
-    language: "Ngôn ngữ",
-
-    // GPU & System Monitoring
-    gpuStatus: "Trạng thái GPU",
-    gpuTemperature: "Nhiệt độ GPU",
-    gpuUtilization: "Sử dụng GPU",
-    vramUsage: "Sử dụng VRAM",
-    emergencyStop: "Dừng khẩn cấp",
-    renderStatus: "Trạng thái xử lý",
-
-    // Text Input
+    backToMenu: "Quay lại menu",
+    comingSoon: "Tính năng đang phát triển",
+    selectMode: "Chọn chế độ TTS phù hợp với nhu cầu của bạn",
+    classicTitle: "TTS Truyền Thống",
+    classicDesc: "Tạo giọng nói từ toàn bộ văn bản cùng lúc. Phù hợp cho văn bản ngắn và demo nhanh.",
+    segmentTitle: "TTS Theo Đoạn", 
+    segmentDesc: "Chia văn bản thành các đoạn nhỏ, tạo giọng riêng lẻ. Phù hợp cho văn bản dài và chỉnh sửa chi tiết.",
+    classicFeatures: [
+      "Xử lý toàn bộ văn bản cùng lúc",
+      "Một file audio đầu ra duy nhất", 
+      "Nhanh chóng và đơn giản",
+      "Lịch sử render 50 lần gần nhất"
+    ],
+    segmentFeatures: [
+      "Chia văn bản theo độ dài tùy chỉnh",
+      "Tạo và chỉnh sửa từng đoạn riêng lẻ",  
+      "Cache thông minh - chỉ render đoạn thay đổi",
+      "Quản lý session và lưu trữ lâu dài"
+    ],
+    stableStatus: "Ổn định - Đã kiểm nghiệm",
+    newStatus: "Mới - Tính năng nâng cao",
+    guidanceTitle: "Hướng dẫn lựa chọn",
+    classicGuidance: "Phù hợp cho văn bản dưới 500 từ, cần kết quả nhanh",
+    segmentGuidance: "Lý tưởng cho văn bản dài, cần chỉnh sửa chi tiết từng phần",
+    
+    // Segment TTS specific
     textInput: "Nhập văn bản",
-    textPlaceholder: "Nhập văn bản tiếng Việt của bạn tại đây...",
-    exampleTexts: "Ví dụ văn bản:",
+    textPlaceholder: "Nhập văn bản tiếng Việt dài của bạn tại đây...",
+    segmentLength: "Độ dài đoạn",
     characters: "ký tự",
     words: "từ",
-
-    // Voice Selection
-    voiceSelection: "Giọng nói",
-    defaultVoice: "Giọng mặc định",
-    usingDefaultVoice: "✓ Đang sử dụng giọng mặc định",
-    useDefaultVoice: "Sử dụng giọng mặc định",
-    recommendedVoice: "Giọng Tina (Khuyến nghị)",
-    addNewProfile: "Thêm profile mới",
-
-    // Generation
-    generateSpeech: "Tạo giọng nói",
-    generating: "Đang tạo giọng nói...",
-    result: "Kết quả",
-    download: "Tải xuống",
-    
-    // Recent Renders
-    recentRenders: "Lịch sử tạo giọng",
-    noRecentRenders: "Chưa có lịch sử tạo giọng nào trong 8 giờ qua",
-    loadingHistory: "Đang tải lịch sử...",
-    page: "Trang",
-    records: "bản ghi",
-    createdAt: "Tạo lúc",
-    duration: "Thời lượng",
-    fileSize: "Kích thước",
-    play: "Phát",
-    downloading: "Đang tải...",
-
-    // Advanced Settings
-    advancedSettings: "Cài đặt nâng cao",
-    guidanceScale: "Guidance Scale",
-    generationSteps: "Bước sinh",
-    speed: "Tốc độ",
-    gpuUsage: "Sử dụng GPU",
-    tokenLimit: "Giới hạn token",
-    featureScale: "Feature Scale",
-    targetRMS: "Target RMS",
-    low: "Thấp",
-    high: "Cao",
-    slow: "Chậm",
-    economy: "Tiết kiệm",
-    maximum: "Tối đa",
-    quality: "Chất lượng",
-
-    // Statistics
-    statistics: "Thống kê",
-    profiles: "Profiles",
-    qualityLevel: "Chất lượng",
-    gpu: "GPU",
-    estimatedTime: "Thời gian ước tính",
-    processingMode: "Chế độ xử lý",
-
-    // Profile Management
-    createProfile: "Tạo profile giọng nói mới",
-    profileName: "Tên profile",
-    displayName: "Tên hiển thị",
-    description: "Mô tả",
-    sampleTranscript: "Transcript mẫu",
-    audioSample: "File audio mẫu",
-    createButton: "Tạo profile",
-    cancel: "Hủy",
-
-    // Notifications
-    success: "Thành công",
+    splitText: "Chia văn bản",
+    segments: "đoạn",
+    segment: "Đoạn",
+    generateAll: "Tạo tất cả đoạn",
+    generateSegment: "Tạo đoạn này",
+    regenerateSegment: "Tạo lại đoạn",
+    playSegment: "Phát đoạn",
+    editSegment: "Chỉnh sửa",
+    deleteSegment: "Xóa đoạn",
+    mergeAll: "Ghép tất cả",
+    downloadAll: "Tải xuống tất cả",
+    sessionId: "Mã phiên",
+    createSession: "Tạo phiên làm việc",
+    loadSession: "Tải phiên làm việc",
+    saveSession: "Lưu phiên làm việc",
+    deleteSession: "Xóa phiên làm việc",
+    processing: "Đang xử lý...",
+    cached: "Đã cache",
+    generated: "Đã tạo",
+    pending: "Chờ xử lý",
     error: "Lỗi",
-    profileCreated: "Tạo profile thành công!",
-    speechGenerated: "Tạo giọng nói thành công!",
-    presetApplied: "Đã áp dụng preset chất lượng",
-    profileDeleted: "Đã xóa profile thành công",
-    cannotLoadProfiles: "Không thể tải danh sách profile",
-    pleaseEnterText: "Vui lòng nhập văn bản cần tạo giọng",
-    pleaseCompleteForm: "Vui lòng điền đầy đủ thông tin",
-    confirmDelete: "Bạn có chắc muốn xóa profile này?",
-
-    // Tooltips
-    tooltips: {
-      guidanceScale: "Điều khiển độ chính xác của mô hình. Giá trị cao hơn tạo ra âm thanh chất lượng hơn nhưng chậm hơn.",
-      generationSteps: "Số bước tính toán. Nhiều bước hơn = chất lượng cao hơn nhưng chậm hơn.",
-      speed: "Tốc độ phát âm. 1.0 = bình thường, <1.0 = chậm, >1.0 = nhanh.",
-      gpuUsage: "Phần trăm GPU được sử dụng. Cao hơn = nhanh hơn nhưng tiêu thụ điện nhiều hơn.",
-      tokenLimit: "Giới hạn số lượng token (từ) có thể xử lý trong một lần.",
-      featureScale: "Điều chỉnh các đặc trưng âm thanh. Ảnh hưởng đến tông điệu và cảm xúc.",
-      targetRMS: "Mức âm lượng mục tiêu. Điều chỉnh độ to của âm thanh đầu ra.",
-      fastPreset: "Tạo nhanh với chất lượng tốt. Phù hợp cho demo và thử nghiệm.",
-      balancedPreset: "Cân bằng tốt nhất giữa chất lượng và tốc độ. Khuyến nghị cho sử dụng hàng ngày.",
-      highPreset: "Chất lượng cao với thời gian xử lý vừa phải. Tốt cho thuyết trình.",
-      premiumPreset: "Chất lượng tối đa cho sản xuất chuyên nghiệp. Thời gian xử lý lâu nhất."
-    }
+    voiceSelection: "Chọn giọng nói",
+    defaultVoice: "Giọng mặc định",
+    profile: "Profile"
   },
-
   en: {
-    // Header
     title: "Premium Vietnamese TTS",
     subtitle: "Generate high-quality Vietnamese speech with advanced AI technology",
-
-    // Theme & Language
     darkMode: "Dark Mode",
-    lightMode: "Light Mode",
-    language: "Language",
-
-    // GPU & System Monitoring
-    gpuStatus: "GPU Status",
-    gpuTemperature: "GPU Temperature",
-    gpuUtilization: "GPU Utilization",
-    vramUsage: "VRAM Usage",
-    emergencyStop: "Emergency Stop",
-    renderStatus: "Render Status",
-
-    // Text Input
+    lightMode: "Light Mode", 
+    backToMenu: "Back to menu",
+    comingSoon: "Feature under development",
+    selectMode: "Choose the TTS mode that fits your needs",
+    classicTitle: "Classic TTS",
+    classicDesc: "Generate speech from entire text at once. Suitable for short texts and quick demos.",
+    segmentTitle: "Segment TTS",
+    segmentDesc: "Split text into small segments, generate individual speech. Suitable for long texts and detailed editing.",
+    classicFeatures: [
+      "Process entire text at once",
+      "Single audio output file",
+      "Fast and simple",
+      "History of last 50 renders"
+    ],
+    segmentFeatures: [
+      "Split text by customizable length",
+      "Create and edit individual segments",
+      "Smart cache - only render changed segments", 
+      "Session management and long-term storage"
+    ],
+    stableStatus: "Stable - Tested",
+    newStatus: "New - Advanced feature",
+    guidanceTitle: "Selection Guide",
+    classicGuidance: "Suitable for texts under 500 words, need quick results",
+    segmentGuidance: "Ideal for long texts, need detailed editing of parts",
+    
+    // Segment TTS specific
     textInput: "Text Input",
-    textPlaceholder: "Enter your Vietnamese text here...",
-    exampleTexts: "Example texts:",
+    textPlaceholder: "Enter your long Vietnamese text here...",
+    segmentLength: "Segment Length",
     characters: "characters",
     words: "words",
-
-    // Voice Selection
+    splitText: "Split Text",
+    segments: "segments",
+    segment: "Segment",
+    generateAll: "Generate All",
+    generateSegment: "Generate This",
+    regenerateSegment: "Regenerate",
+    playSegment: "Play",
+    editSegment: "Edit",
+    deleteSegment: "Delete",
+    mergeAll: "Merge All",
+    downloadAll: "Download All",
+    sessionId: "Session ID",
+    createSession: "Create Session",
+    loadSession: "Load Session",
+    saveSession: "Save Session",
+    deleteSession: "Delete Session",
+    processing: "Processing...",
+    cached: "Cached",
+    generated: "Generated",
+    pending: "Pending",
+    error: "Error",
     voiceSelection: "Voice Selection",
     defaultVoice: "Default Voice",
-    usingDefaultVoice: "✓ Using default voice",
-    useDefaultVoice: "Use default voice",
-    recommendedVoice: "Tina Voice (Recommended)",
-    addNewProfile: "Add new profile",
-
-    // Generation
-    generateSpeech: "Generate Speech",
-    generating: "Generating speech...",
-    result: "Result",
-    download: "Download",
-    
-    // Recent Renders
-    recentRenders: "Recent Renders",
-    noRecentRenders: "No recent renders in the last 8 hours",
-    loadingHistory: "Loading history...",
-    page: "Page",
-    records: "records",
-    createdAt: "Created at",
-    duration: "Duration",
-    fileSize: "File Size",
-    play: "Play",
-    downloading: "Downloading...",
-
-    // Advanced Settings
-    advancedSettings: "Advanced Settings",
-    guidanceScale: "Guidance Scale",
-    generationSteps: "Generation Steps",
-    speed: "Speed",
-    gpuUsage: "GPU Usage",
-    tokenLimit: "Token Limit",
-    featureScale: "Feature Scale",
-    targetRMS: "Target RMS",
-    low: "Low",
-    high: "High",
-    slow: "Slow",
-    economy: "Economy",
-    maximum: "Maximum",
-    quality: "Quality",
-
-    // Statistics
-    statistics: "Statistics",
-    profiles: "Profiles",
-    qualityLevel: "Quality",
-    gpu: "GPU",
-    estimatedTime: "Estimated time",
-    processingMode: "Processing mode",
-
-    // Profile Management
-    createProfile: "Create new voice profile",
-    profileName: "Profile name",
-    displayName: "Display name",
-    description: "Description",
-    sampleTranscript: "Sample transcript",
-    audioSample: "Audio sample file",
-    createButton: "Create profile",
-    cancel: "Cancel",
-
-    // Notifications
-    success: "Success",
-    error: "Error",
-    profileCreated: "Profile created successfully!",
-    speechGenerated: "Speech generated successfully!",
-    presetApplied: "Quality preset applied",
-    profileDeleted: "Profile deleted successfully",
-    cannotLoadProfiles: "Cannot load profile list",
-    pleaseEnterText: "Please enter text to generate speech",
-    pleaseCompleteForm: "Please complete all required fields",
-    confirmDelete: "Are you sure you want to delete this profile?",
-
-    // Tooltips
-    tooltips: {
-      guidanceScale: "Controls model accuracy. Higher values produce better quality but slower generation.",
-      generationSteps: "Number of computation steps. More steps = higher quality but slower processing.",
-      speed: "Speech playback speed. 1.0 = normal, <1.0 = slower, >1.0 = faster.",
-      gpuUsage: "Percentage of GPU used. Higher = faster but more power consumption.",
-      tokenLimit: "Maximum number of tokens (words) that can be processed at once.",
-      featureScale: "Adjusts audio features. Affects tone and emotion in the speech.",
-      targetRMS: "Target volume level. Controls the loudness of the output audio.",
-      fastPreset: "Quick generation with good quality. Suitable for demos and testing.",
-      balancedPreset: "Best balance between quality and speed. Recommended for daily use.",
-      highPreset: "High quality with moderate processing time. Good for presentations.",
-      premiumPreset: "Maximum quality for professional production. Longest processing time."
-    }
+    profile: "Profile"
   }
 };
 
 // === UTILITY COMPONENTS === //
-
-const LoadingSpinner = ({ size = 'default' }) => (
-  <div className={`spinner ${size === 'small' ? 'spinner-small' : ''}`}></div>
-);
-
-const AudioVisualizer = ({ isPlaying }) => (
-  <div className={`audio-visualizer ${isPlaying ? 'animate-pulse-gentle' : ''}`}>
-    {[...Array(12)].map((_, i) => (
-      <div key={i} className="audio-bar"></div>
-    ))}
-  </div>
-);
-
-const Notification = ({ type, message, onClose }) => {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 4000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  return (
-    <div className={`notification notification-${type}`}>
-      <div className="flex items-center justify-between">
-        <span>{message}</span>
-        <button onClick={onClose} className="ml-4 text-white/80 hover:text-white">
-          <i className="fas fa-times"></i>
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const Modal = ({ isOpen, onClose, title, children }) => {
-  if (!isOpen) return null;
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-white">{title}</h2>
-          <button
-            onClick={onClose}
-            className="text-white/70 hover:text-white text-xl"
-          >
-            <i className="fas fa-times"></i>
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-};
-
-// Tooltip component using Tippy.js
-const Tooltip = ({ content, children, position = 'top' }) => {
-  const tooltipRef = useRef(null);
-
-  useEffect(() => {
-    if (tooltipRef.current && window.tippy) {
-      const instance = window.tippy(tooltipRef.current, {
-        content: content,
-        placement: position,
-        theme: 'light-border',
-        delay: [300, 100],
-        duration: [200, 150],
-        animation: 'scale',
-        arrow: true,
-        hideOnClick: false,
-        touch: ['hold', 500],
-      });
-
-      return () => {
-        if (instance) {
-          instance.destroy();
-        }
-      };
-    }
-  }, [content, position]);
-
-  return (
-    <span ref={tooltipRef}>
-      {children}
-    </span>
-  );
-};
-
 const LanguageToggle = ({ currentLang, onLanguageChange }) => (
   <div className="language-toggle">
     <button
@@ -353,784 +165,41 @@ const ThemeToggle = ({ currentTheme, onThemeChange, t }) => (
   </div>
 );
 
-// === MAIN COMPONENTS === //
-
-const VoiceProfileCard = ({ profileId, profile, isSelected, onSelect, onEdit, onDelete, t }) => {
-  // Check if this is a default profile (tina or NSUT-Phu-Thang)
-  const isDefaultProfile = profileId === 'tina' || profileId === 'NSUT-Phu-Thang';
-  
-  return (
-    <div
-      className={`card-profile ${isSelected ? 'selected' : ''}`}
-      onClick={() => onSelect(profileId)}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-r from-indigo-400 to-purple-500 flex items-center justify-center mr-3 animate-float">
-            <i className="fas fa-microphone text-white text-lg"></i>
-          </div>
-          <div>
-            <h3 className="text-white font-semibold text-lg">
-              {profile.name}
-              {isDefaultProfile && (
-                <span className="ml-2 text-xs bg-blue-500/20 text-blue-300 px-2 py-1 rounded">
-                  Mặc định
-                </span>
-              )}
-            </h3>
-            <p className="text-white/70 text-sm">{profile.description}</p>
-          </div>
-        </div>
-        {isSelected && !isDefaultProfile && (
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit(profileId);
-              }}
-              className="text-white/70 hover:text-white transition-colors"
-            >
-              <i className="fas fa-edit"></i>
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(profileId);
-              }}
-              className="text-red-400 hover:text-red-300 transition-colors"
-            >
-              <i className="fas fa-trash"></i>
-            </button>
-          </div>
-        )}
-        {isSelected && isDefaultProfile && (
-          <div className="flex items-center space-x-2">
-            <span className="text-white/40 text-xs">
-              Không thể chỉnh sửa
-            </span>
-          </div>
-        )}
-      </div>
-      <div className="text-xs text-white/50">
-        <i className="fas fa-clock mr-1"></i>
-        {profile.created_at || 'Recently created'}
-      </div>
-    </div>
-  );
-};
-
-const GPUMonitor = ({ t }) => {
-  const [gpuStatus, setGpuStatus] = useState({
-    temperature: 0,
-    utilization: 0,
-    memory_used: 0,
-    memory_total: 0,
-    status: "UNKNOWN"
-  });
-  const [renderStatus, setRenderStatus] = useState({
-    is_rendering: false,
-    current_sentence: 0,
-    total_sentences: 0,
-    estimated_time_remaining: 0,
-    elapsed_time: 0
-  });
-
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        // Get GPU status
-        const gpuResponse = await fetch('http://localhost:8000/gpu_status');
-        if (gpuResponse.ok) {
-          const gpuData = await gpuResponse.json();
-          setGpuStatus(gpuData);
-        }
-
-        // Get render status
-        const renderResponse = await fetch('http://localhost:8000/render_status');
-        if (renderResponse.ok) {
-          const renderData = await renderResponse.json();
-          setRenderStatus(renderData);
-        }
-      } catch (error) {
-        console.warn('Failed to fetch monitoring data:', error);
-      }
-    }, 5000); // Update every 5 seconds
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleEmergencyStop = async () => {
-    try {
-      await fetch('http://localhost:8000/stop_render', { method: 'POST' });
-      showNotification('success', 'Rendering stopped successfully');
-    } catch (error) {
-      showNotification('error', 'Failed to stop rendering');
+// === MODE SELECTION COMPONENT === //
+const ModeSelection = ({ onSelectMode, t, theme, language, onLanguageChange, onThemeChange }) => {
+  const modes = [
+    {
+      id: 'classic',
+      name: 'Classic TTS',
+      title: t.classicTitle,
+      description: t.classicDesc,
+      features: t.classicFeatures,
+      icon: 'fas fa-microphone',
+      color: 'from-blue-500 to-indigo-600',
+      status: t.stableStatus
+    },
+    {
+      id: 'segment',
+      name: 'Segment TTS',
+      title: t.segmentTitle,
+      description: t.segmentDesc,
+      features: t.segmentFeatures,
+      icon: 'fas fa-layer-group',
+      color: 'from-green-500 to-emerald-600',
+      status: t.newStatus
     }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'NORMAL': return 'text-green-400';
-      case 'THROTTLE': return 'text-yellow-400';
-      case 'EMERGENCY': return 'text-red-400';
-      default: return 'text-gray-400';
-    }
-  };
-
-  return (
-    <div className="card animate-slide-in-right">
-      <h3 className="text-lg font-bold text-white mb-4 flex items-center">
-        <i className="fas fa-tachometer-alt mr-3"></i>
-        {t.gpuStatus}
-      </h3>
-      
-      <div className="space-y-3">
-        <div className="flex justify-between text-white/80">
-          <span>{t.gpuTemperature}:</span>
-          <span className={`font-semibold ${getStatusColor(gpuStatus.status)}`}>
-            {gpuStatus.temperature.toFixed(1)}°C
-          </span>
-        </div>
-        
-        <div className="flex justify-between text-white/80">
-          <span>{t.gpuUtilization}:</span>
-          <span className="font-semibold">{gpuStatus.utilization.toFixed(1)}%</span>
-        </div>
-        
-        <div className="flex justify-between text-white/80">
-          <span>{t.vramUsage}:</span>
-          <span className="font-semibold">
-            {(gpuStatus.memory_used / 1024).toFixed(1)}GB / {(gpuStatus.memory_total / 1024).toFixed(1)}GB
-          </span>
-        </div>
-
-        {renderStatus.is_rendering && (
-          <div className="mt-4 p-3 bg-blue-500/20 rounded-lg">
-            <div className="flex justify-between text-white/80 mb-2">
-              <span>Progress:</span>
-              <span>{renderStatus.current_sentence}/{renderStatus.total_sentences}</span>
-            </div>
-            <div className="flex justify-between text-white/80 mb-2">
-              <span>Remaining:</span>
-              <span>{Math.round(renderStatus.estimated_time_remaining)}s</span>
-            </div>
-            <div className="w-full bg-white/20 rounded-full h-2">
-              <div 
-                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${(renderStatus.current_sentence / renderStatus.total_sentences) * 100}%` }}
-              ></div>
-            </div>
-          </div>
-        )}
-
-        {(renderStatus.is_rendering || gpuStatus.status === 'EMERGENCY') && (
-          <button
-            onClick={handleEmergencyStop}
-            className="btn-danger w-full mt-4"
-          >
-            <i className="fas fa-stop mr-2"></i>
-            {t.emergencyStop}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const RenderStatusMonitor = ({ t, onEmergencyStop }) => {
-  const [renderStatus, setRenderStatus] = useState(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    const fetchRenderStatus = async () => {
-      try {
-        const response = await fetch('http://localhost:8000/render_status');
-        const data = await response.json();
-        setRenderStatus(data);
-      } catch (error) {
-        console.error('Failed to fetch render status:', error);
-      }
-    };
-
-    // Poll render status every 2 seconds during processing
-    const interval = setInterval(fetchRenderStatus, 2000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleEmergencyStop = async () => {
-    setLoading(true);
-    try {
-      await fetch('http://localhost:8000/stop_render', { method: 'POST' });
-      onEmergencyStop();
-    } catch (error) {
-      console.error('Failed to stop render:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="card animate-fade-in-up">
-      <h3 className="text-lg font-bold text-white mb-4 flex items-center">
-        <i className="fas fa-cogs mr-3"></i>
-        {t.renderStatus}
-      </h3>
-      
-      {renderStatus && (
-        <div className="space-y-3">
-          <div className="flex justify-between text-white/80">
-            <span>Status:</span>
-            <span className={`font-semibold ${
-              renderStatus.is_processing ? 'text-yellow-400' : 'text-green-400'
-            }`}>
-              {renderStatus.is_processing ? 'Processing...' : 'Ready'}
-            </span>
-          </div>
-          
-          {renderStatus.current_sentence && (
-            <div className="text-white/60 text-sm">
-              <div>Sentence: {renderStatus.current_sentence}/{renderStatus.total_sentences}</div>
-              <div className="w-full bg-white/10 rounded-full h-2 mt-1">
-                <div 
-                  className="bg-blue-400 h-2 rounded-full transition-all duration-300" 
-                  style={{ width: `${(renderStatus.current_sentence / renderStatus.total_sentences) * 100}%` }}
-                ></div>
-              </div>
-            </div>
-          )}
-          
-          {renderStatus.estimated_time_remaining && (
-            <div className="text-white/60 text-sm">
-              Estimated time: {renderStatus.estimated_time_remaining}s
-            </div>
-          )}
-        </div>
-      )}
-      
-      {renderStatus?.is_processing && (
-        <button
-          onClick={handleEmergencyStop}
-          disabled={loading}
-          className="btn-danger w-full mt-4"
-        >
-          <i className="fas fa-stop mr-2"></i>
-          {loading ? 'Stopping...' : t.emergencyStop}
-        </button>
-      )}
-    </div>
-  );
-};
-
-const RecentRenders = ({ t, recentRenders, loading, pagination, onPageChange, onPlayRender }) => {
-  const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  };
-
-  const formatDateTime = (isoString) => {
-    const date = new Date(isoString);
-    return date.toLocaleString('vi-VN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const handleDownload = async (record) => {
-    try {
-      const response = await fetch(`http://localhost:8000/render_file/${record.id}`);
-      if (!response.ok) throw new Error('Download failed');
-      
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `render_${record.id}.wav`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Download failed:', error);
-    }
-  };
-
-  return (
-    <div className="card animate-slide-in-left">
-      <h3 className="text-lg font-bold text-white mb-4 flex items-center">
-        <i className="fas fa-history mr-3"></i>
-        {t.recentRenders}
-      </h3>
-      
-      {loading ? (
-        <div className="text-center py-8">
-          <LoadingSpinner />
-          <p className="text-white/70 mt-2">{t.loadingHistory}</p>
-        </div>
-      ) : recentRenders.length === 0 ? (
-        <div className="text-center py-8 text-white/60">
-          <i className="fas fa-clock text-2xl mb-2"></i>
-          <p>{t.noRecentRenders}</p>
-        </div>
-      ) : (
-        <>
-          <div className="space-y-3 mb-4">
-            {recentRenders.map((record) => (
-              <div key={record.id} className="bg-white/5 rounded-lg p-3 hover:bg-white/10 transition-colors">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-medium truncate">
-                      {record.full_text_preview}
-                    </p>
-                    <div className="flex items-center space-x-4 mt-1 text-xs text-white/60">
-                      <span>
-                        <i className="fas fa-user mr-1"></i>
-                        {record.profile_id}
-                      </span>
-                      <span>
-                        <i className="fas fa-clock mr-1"></i>
-                        {formatDateTime(record.timestamp)}
-                      </span>
-                      <span>
-                        <i className="fas fa-text-width mr-1"></i>
-                        {record.word_count} từ
-                      </span>
-                      <span>
-                        <i className="fas fa-file mr-1"></i>
-                        {formatFileSize(record.file_size)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2 ml-2">
-                    <button
-                      onClick={() => onPlayRender(record)}
-                      className="text-blue-400 hover:text-blue-300 transition-colors"
-                      title={t.play}
-                    >
-                      <i className="fas fa-play"></i>
-                    </button>
-                    <button
-                      onClick={() => handleDownload(record)}
-                      className="text-green-400 hover:text-green-300 transition-colors"
-                      title={t.download}
-                    >
-                      <i className="fas fa-download"></i>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          
-          {/* Pagination */}
-          {pagination.total_pages > 1 && (
-            <div className="flex items-center justify-between text-sm text-white/70">
-              <span>
-                {t.page} {pagination.page} / {pagination.total_pages} 
-                ({pagination.total_records} {t.records})
-              </span>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => onPageChange(pagination.page - 1)}
-                  disabled={!pagination.has_prev}
-                  className="px-3 py-1 bg-white/10 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/20 transition-colors"
-                >
-                  <i className="fas fa-chevron-left"></i>
-                </button>
-                <button
-                  onClick={() => onPageChange(pagination.page + 1)}
-                  disabled={!pagination.has_next}
-                  className="px-3 py-1 bg-white/10 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/20 transition-colors"
-                >
-                  <i className="fas fa-chevron-right"></i>
-                </button>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-};
-
-// === MAIN APP === //
-
-function App() {
-  // Language state
-  const [language, setLanguage] = useState(() => {
-    return localStorage.getItem('language') || 'vi';
-  });
-
-  // Theme state
-  const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('theme') || 'light';
-  });
-
-  const t = translations[language];
-
-  // Apply theme to document
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  // State management
-  const [text, setText] = useState('');
-  const [selectedProfile, setSelectedProfile] = useState('');
-  const [profiles, setProfiles] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [audio, setAudio] = useState(null);
-  const [notification, setNotification] = useState(null);
-  const [showAddProfile, setShowAddProfile] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [lastGenerationTime, setLastGenerationTime] = useState(null);
-  
-  // Recent renders state
-  const [recentRenders, setRecentRenders] = useState([]);
-  const [rendersLoading, setRendersLoading] = useState(false);
-  const [rendersPagination, setRendersPagination] = useState({
-    page: 1,
-    per_page: 10,
-    total_records: 0,
-    total_pages: 1,
-    has_next: false,
-    has_prev: false
-  });
-  
-  // Rendering status monitoring
-  const [isCurrentlyRendering, setIsCurrentlyRendering] = useState(false);
-
-  // Profile form state
-  const [profileForm, setProfileForm] = useState({
-    name: '',
-    display_name: '',
-    description: '',
-    sample_text: '',
-    sample_wav: null
-  });
-
-  const audioRef = useRef(null);
-
-  // Example texts for both languages
-  const exampleTexts = {
-    vi: [
-      "Xin chào, tôi là trợ lý ảo của bạn. Tôi có thể giúp bạn tạo ra giọng nói tiếng Việt tự nhiên và chất lượng cao.",
-      "Việt Nam là đất nước có nền văn hóa lâu đời và phong phú. Từ vịnh Hạ Long kỳ vĩ đến phố cổ Hội An thơ mộng.",
-      "Hôm nay trời đẹp quá, chúng ta cùng nhau khám phá những điều tuyệt vời trong cuộc sống này nhé!",
-      "Công nghệ trí tuệ nhân tạo đang phát triển mạnh mẽ, mang lại nhiều tiện ích cho cuộc sống con người.",
-      "Âm nhạc là ngôn ngữ của tâm hồn, kết nối mọi người lại với nhau qua những giai điệu du dương.",
-      "Giáo dục là chìa khóa mở ra tương lai, giúp chúng ta phát triển bản thân và đóng góp cho xã hội.",
-      "Gia đình là nơi yêu thương và hạnh phúc nhất, luôn ủng hộ chúng ta trong mọi hoàn cảnh của cuộc đời.",
-      "Thiên nhiên tuyệt đẹp với núi non trùng điệp, rừng xanh bát ngát và biển cả mênh mông bao la.",
-      "Thể thao không chỉ rèn luyện sức khỏe mà còn giúp chúng ta có tinh thần lạc quan và ý chí mạnh mẽ.",
-      "Khoa học và kỹ thuật đang thay đổi thế giới, mở ra những cơ hội mới cho sự phát triển bền vững."
-    ],
-    en: [
-      "Hello, I am your virtual assistant. I can help you create natural and high-quality Vietnamese speech.",
-      "Vietnam is a country with a long and rich cultural heritage. From the magnificent Ha Long Bay to the poetic ancient town of Hoi An.",
-      "What a beautiful day today! Let's explore the wonderful things in life together!",
-      "Artificial intelligence technology is developing rapidly, bringing many conveniences to human life.",
-      "Music is the language of the soul, connecting people through melodious tunes.",
-      "Education is the key to the future, helping us develop ourselves and contribute to society.",
-      "Family is the most loving and happy place, always supporting us in all circumstances of life.",
-      "Nature is beautiful with majestic mountains, vast green forests and boundless seas.",
-      "Sports not only strengthen health but also help us have an optimistic spirit and strong will.",
-      "Science and technology are changing the world, opening new opportunities for sustainable development."
-    ]
-  };
-
-  // Random example text rotation
-  const [currentExampleIndex, setCurrentExampleIndex] = useState(0);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentExampleIndex(prev => (prev + 1) % exampleTexts[language].length);
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [language, exampleTexts]);
-
-  // Language change handler
-  const handleLanguageChange = (lang) => {
-    setLanguage(lang);
-    localStorage.setItem('language', lang);
-  };
-
-  // Load profiles and recent renders on component mount
-  useEffect(() => {
-    loadProfiles();
-    loadRecentRenders();
-  }, []);
-
-  // Audio event listeners
-  useEffect(() => {
-    if (audioRef.current) {
-      const audio = audioRef.current;
-      audio.addEventListener('play', () => setIsPlaying(true));
-      audio.addEventListener('pause', () => setIsPlaying(false));
-      audio.addEventListener('ended', () => setIsPlaying(false));
-
-      return () => {
-        audio.removeEventListener('play', () => setIsPlaying(true));
-        audio.removeEventListener('pause', () => setIsPlaying(false));
-        audio.removeEventListener('ended', () => setIsPlaying(false));
-      };
-    }
-  }, [audio]);
-
-  const loadProfiles = async () => {
-    try {
-      const response = await fetch('http://localhost:8000/profiles');
-      const data = await response.json();
-      setProfiles(data);
-    } catch (error) {
-      showNotification('error', t.cannotLoadProfiles);
-    }
-  };
-
-  const loadRecentRenders = async (page = 1) => {
-    try {
-      setRendersLoading(true);
-      const response = await fetch(`http://localhost:8000/recent_renders?page=${page}&per_page=10`);
-      const data = await response.json();
-      setRecentRenders(data.data || []);
-      setRendersPagination(data.pagination || {
-        page: 1,
-        per_page: 10,
-        total_records: 0,
-        total_pages: 1,
-        has_next: false,
-        has_prev: false
-      });
-    } catch (error) {
-      console.error('Failed to load recent renders:', error);
-      setRecentRenders([]);
-    } finally {
-      setRendersLoading(false);
-    }
-  };
-
-  const showNotification = (type, message) => {
-    setNotification({ type, message });
-  };
-
-  const estimateProcessingTime = () => {
-    const wordCount = text.split(' ').filter(w => w.length > 0).length;
-    const baseTime = Math.max(2, wordCount * 0.5); // Base time for sentence-by-sentence processing
-    return Math.round(baseTime);
-  };
-
-  const handleEmergencyStop = () => {
-    setLoading(false);
-    setAudio(null);
-    showNotification('success', 'Processing stopped successfully');
-  };
-
-  // Clean Vietnamese text before synthesis
-  const cleanVietnameseText = (text) => {
-    if (!text) return '';
-    
-    // Remove parenthetical annotations (including Chinese characters, explanations, etc.)
-    // Matches: (content), [content], （content）
-    text = text.replace(/[(\[（][^)\]）]*[)\]）]/g, '');
-    
-    // Remove emojis and Unicode symbols
-    text = text.replace(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2500}-\u{2BEF}]|[\u{2702}-\u{27B0}]|[\u{24C2}-\u{1F251}]|[\u{1f926}-\u{1f937}]|[\u{10000}-\u{10ffff}]|[\u2640-\u2642]|[\u2600-\u2B55]|[\u200d]|[\u23cf]|[\u23e9]|[\u231a]|[\ufe0f]|[\u3030]/gu, '');
-    
-    // Remove arrow symbols and special markers
-    text = text.replace(/[→←↑↓➡️⬅️⬆️⬇️▶️◀️▲▼👉👈👆👇]/g, '');
-    
-    // Normalize multiple whitespace to single space
-    text = text.replace(/\s+/g, ' ');
-    
-    // Clean up spacing around punctuation
-    text = text.replace(/\s*([.!?…,;:])\s*/g, '$1 ');
-    
-    // Remove extra spaces at beginning of lines
-    text = text.replace(/^\s+/gm, '');
-    
-    // Remove trailing spaces and clean up final result
-    text = text.replace(/\s+$/, '');
-    text = text.trim();
-    
-    return text;
-  };
-
-  const handleSynthesize = async () => {
-    if (!text.trim()) {
-      showNotification('error', t.pleaseEnterText);
-      return;
-    }
-
-    // Clean the text before sending to backend
-    const cleanedText = cleanVietnameseText(text);
-    
-    if (!cleanedText.trim()) {
-      showNotification('error', 'Văn bản sau khi làm sạch không có nội dung hợp lệ');
-      return;
-    }
-
-    setLoading(true);
-    setIsCurrentlyRendering(true);  // Track rendering state
-    setAudio(null);
-    const startTime = Date.now();
-
-    try {
-      const formData = new FormData();
-      if (selectedProfile) formData.append('profile_id', selectedProfile);
-      formData.append('text', cleanedText);  // Use cleaned text
-
-      console.log('Sending request with:', {
-        profile_id: selectedProfile || 'default',
-        original_text_length: text.length,
-        cleaned_text_length: cleanedText.length,
-        text_preview: cleanedText.substring(0, 50) + '...'
-      });
-
-      const response = await fetch('http://localhost:8000/synthesize_speech', {
-        method: 'POST',
-        body: formData,
-      });
-
-      console.log('Response status:', response.status, response.statusText);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response:', errorText);
-        throw new Error(`HTTP ${response.status}: ${response.statusText}\n${errorText}`);
-      }
-
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-      setAudio(audioUrl);
-      setLastGenerationTime(Math.round((Date.now() - startTime) / 1000));
-      showNotification('success', t.speechGenerated);
-      
-      // Reload recent renders after successful synthesis
-      await loadRecentRenders();
-      
-    } catch (error) {
-      showNotification('error', `${t.error}: ${error.message}`);
-    } finally {
-      setLoading(false);
-      setIsCurrentlyRendering(false);  // Reset rendering state
-    }
-  };
-
-  const handleAddProfile = async (e) => {
-    e.preventDefault();
-
-    if (!profileForm.name || !profileForm.display_name || !profileForm.sample_text || !profileForm.sample_wav) {
-      showNotification('error', t.pleaseCompleteForm);
-      return;
-    }
-
-    try {
-      const formData = new FormData();
-      Object.entries(profileForm).forEach(([key, value]) => {
-        if (value) formData.append(key, value);
-      });
-
-      const response = await fetch('http://localhost:8000/profiles', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Cannot create profile');
-      }
-
-      showNotification('success', t.profileCreated);
-      setShowAddProfile(false);
-      setProfileForm({
-        name: '',
-        display_name: '',
-        description: '',
-        sample_text: '',
-        sample_wav: null
-      });
-      loadProfiles();
-    } catch (error) {
-      showNotification('error', error.message);
-    }
-  };
-
-  const handleDeleteProfile = async (profileId) => {
-    if (!confirm(t.confirmDelete)) return;
-
-    try {
-      const response = await fetch(`http://localhost:8000/profiles/${profileId}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('Cannot delete profile');
-      }
-
-      showNotification('success', t.profileDeleted);
-      if (selectedProfile === profileId) {
-        setSelectedProfile('');
-      }
-      loadProfiles();
-    } catch (error) {
-      showNotification('error', error.message);
-    }
-  };
-
-  const handlePlayRender = async (record) => {
-    try {
-      // Set current audio to the render file
-      const response = await fetch(`http://localhost:8000/render_file/${record.id}`);
-      if (!response.ok) throw new Error('Failed to load audio');
-      
-      const blob = await response.blob();
-      const audioUrl = URL.createObjectURL(blob);
-      setAudio(audioUrl);
-    } catch (error) {
-      showNotification('error', `Failed to play audio: ${error.message}`);
-    }
-  };
-
-  const handlePageChange = (page) => {
-    loadRecentRenders(page);
-  };
-
-  const downloadAudio = () => {
-    if (audio) {
-      const a = document.createElement('a');
-      a.href = audio;
-      a.download = `vietnamese_speech_${Date.now()}.wav`;
-      a.click();
-    }
-  };
+  ];
 
   return (
     <div className="min-h-screen py-8 px-4">
-      {/* Theme Toggle - Bottom Right */}
       <div className="theme-toggle-left">
-        <ThemeToggle
-          currentTheme={theme}
-          onThemeChange={setTheme}
-          t={t}
-        />
+        <ThemeToggle currentTheme={theme} onThemeChange={onThemeChange} t={t} />
       </div>
-
-      {/* Language Toggle - Top Left */}
       <div className="language-toggle-right">
-        <LanguageToggle
-          currentLang={language}
-          onLanguageChange={handleLanguageChange}
-        />
+        <LanguageToggle currentLang={language} onLanguageChange={onLanguageChange} />
       </div>
 
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
         <header className="text-center mb-12 animate-fade-in-up">
           <h1 className="text-5xl md:text-7xl font-bold text-gray-800-title mb-4 animate-float">
             {t.title}
@@ -1143,323 +212,1021 @@ function App() {
           </div>
         </header>
 
-        {/* Main Content */}
-        <div className="space-y-8">
-          {/* Voice Profile Management - Central Position */}
-          <div className="max-w-4xl mx-auto">
-            <div className="card animate-fade-in-up">
-              <h2 className="text-xl font-bold text-white mb-4 flex items-center justify-center">
-                <i className="fas fa-user-circle mr-3"></i>
-                {t.voiceSelection}
-              </h2>
-
-              {/* Default Voice Option */}
-              <div className="mb-4">
-                <button
-                  onClick={() => setSelectedProfile('')}
-                  className={`w-full p-4 rounded-lg border-2 transition-all duration-300 ${!selectedProfile
-                      ? 'border-green-400 bg-green-400/10'
-                      : 'border-white/20 hover:border-white/40'
-                    }`}
-                >
-                  <div className="flex items-center justify-center">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-r from-green-400 to-blue-500 flex items-center justify-center mr-3">
-                      <i className="fas fa-star text-white"></i>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-white font-semibold">
-                        {!selectedProfile ? t.usingDefaultVoice : t.useDefaultVoice}
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-center text-white mb-8">
+            {t.selectMode}
+          </h2>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-6xl mx-auto">
+            {modes.map((mode) => (
+              <div
+                key={mode.id}
+                className="card hover:transform hover:scale-105 transition-all duration-300 cursor-pointer relative overflow-hidden"
+                onClick={() => onSelectMode(mode.id)}
+              >
+                <div className={`absolute inset-0 bg-gradient-to-br ${mode.color} opacity-10`}></div>
+                
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center">
+                      <div className={`w-16 h-16 rounded-full bg-gradient-to-r ${mode.color} flex items-center justify-center mr-4 animate-float`}>
+                        <i className={`${mode.icon} text-white text-2xl`}></i>
                       </div>
-                      <div className="text-white/60 text-sm">{t.recommendedVoice}</div>
+                      <div>
+                        <h3 className="text-2xl font-bold text-white">{mode.title}</h3>
+                        <p className="text-white/70 text-sm">{mode.name}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className={`text-xs px-3 py-1 rounded-full ${
+                        mode.id === 'classic' 
+                          ? 'bg-blue-500/20 text-blue-300' 
+                          : 'bg-green-500/20 text-green-300'
+                      }`}>
+                        {mode.status}
+                      </span>
                     </div>
                   </div>
-                </button>
+
+                  <p className="text-white/80 mb-6 leading-relaxed">
+                    {mode.description}
+                  </p>
+
+                  <div className="space-y-3 mb-6">
+                    {mode.features.map((feature, index) => (
+                      <div key={index} className="flex items-center text-white/70">
+                        <i className="fas fa-check-circle text-green-400 mr-3"></i>
+                        <span className="text-sm">{feature}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button 
+                    className={`btn-primary w-full text-lg py-4 bg-gradient-to-r ${mode.color} hover:shadow-lg transition-all duration-300`}
+                    onClick={() => onSelectMode(mode.id)}
+                  >
+                    <i className={`${mode.icon} mr-3`}></i>
+                    Chọn {mode.title}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="text-center mt-12">
+          <div className="card max-w-2xl mx-auto">
+            <h3 className="text-xl font-bold text-white mb-4">
+              <i className="fas fa-info-circle mr-2"></i>
+              {t.guidanceTitle}
+            </h3>
+            <div className="text-white/80 text-left space-y-2">
+              <p><strong>Classic TTS:</strong> {t.classicGuidance}</p>
+              <p><strong>Segment TTS:</strong> {t.segmentGuidance}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// === SEGMENT TTS COMPONENT === //
+const SegmentTTS = ({ onBack, t, theme, language, onLanguageChange, onThemeChange }) => {
+  // States for segment TTS
+  const [text, setText] = useState('');
+  const [segmentLength, setSegmentLength] = useState(50);
+  const [segments, setSegments] = useState([]);
+  const [selectedProfile, setSelectedProfile] = useState('');
+  const [profiles, setProfiles] = useState({});
+  const [sessionId, setSessionId] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [notification, setNotification] = useState(null);
+  const [sessionsList, setSessionsList] = useState([]);
+  const [autoGenerate, setAutoGenerate] = useState(false);
+  const [showSessionsList, setShowSessionsList] = useState(false);
+  const [editingSegment, setEditingSegment] = useState(null);
+  const [editingText, setEditingText] = useState('');
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, eta: null });
+  const [startTime, setStartTime] = useState(null);
+
+  // Load profiles on component mount
+  useEffect(() => {
+    fetchProfiles();
+  }, []);
+
+  const fetchProfiles = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/profiles');
+      if (response.ok) {
+        const data = await response.json();
+        setProfiles(data || {});
+      }
+    } catch (error) {
+      console.error('Error fetching profiles:', error);
+      setProfiles({});
+    }
+  };
+
+  // Create segment session
+  const splitTextIntoSegments = async () => {
+    if (!text.trim()) {
+      showNotification('Vui lòng nhập văn bản', 'error');
+      return;
+    }
+
+    try {
+      const response = await fetch('http://localhost:8000/create_simple_session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: text.trim(),
+          segment_length: segmentLength,
+          profile_id: selectedProfile || null
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setSessionId(result.session_id);
+        setSegments(result.segments.map(s => ({
+          ...s,
+          audioUrl: null
+        })));
+        showNotification(`Tạo session với ${result.segments_count} đoạn`, 'success');
+      } else {
+        throw new Error('Failed to create session');
+      }
+    } catch (error) {
+      console.error('Error creating session:', error);
+      showNotification('Lỗi tạo session', 'error');
+    }
+  };
+
+  // Generate single segment
+  const generateSegment = async (segmentId) => {
+    if (!sessionId) {
+      showNotification('Vui lòng tạo session trước', 'error');
+      return;
+    }
+
+    // Update segment status
+    setSegments(prev => prev.map(s => 
+      s.id === segmentId ? { ...s, status: 'processing' } : s
+    ));
+
+    try {
+      const response = await fetch(`http://localhost:8000/generate_simple_segment/${sessionId}/${segmentId}`, {
+        method: 'POST'
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        
+        // Get audio URL for playback
+        const audioUrl = `/audio/${sessionId}/${segmentId}`;
+        
+        setSegments(prev => prev.map(s => 
+          s.id === segmentId ? { 
+            ...s, 
+            status: 'completed',
+            audio: audioUrl,
+            generated_at: result.generated_at
+          } : s
+        ));
+        
+        showNotification(`Đã tạo xong đoạn ${segmentId + 1}`, 'success');
+      } else {
+        throw new Error('Failed to generate segment');
+      }
+    } catch (error) {
+      console.error('Error generating segment:', error);
+      setSegments(prev => prev.map(s => 
+        s.id === segmentId ? { ...s, status: 'error' } : s
+      ));
+      showNotification(`Lỗi tạo đoạn ${segmentId + 1}`, 'error');
+    }
+  };
+
+  // Generate all segments with progress tracking
+  const generateAllSegments = async () => {
+    if (segments.length === 0) {
+      showNotification('Vui lòng chia văn bản trước', 'error');
+      return;
+    }
+
+    const pendingSegments = segments.filter(s => s.status === 'pending' || s.status === 'error');
+    if (pendingSegments.length === 0) {
+      showNotification('Tất cả segments đã được tạo', 'success');
+      return;
+    }
+
+    setIsProcessing(true);
+    setStartTime(Date.now());
+    setBatchProgress({ current: 0, total: pendingSegments.length, eta: null });
+    
+    let completed = 0;
+    const segmentTimes = [];
+
+    for (const segment of pendingSegments) {
+      const segmentStart = Date.now();
+      
+      // Update progress
+      setBatchProgress(prev => ({ ...prev, current: completed }));
+      
+      await generateSegment(segment.id);
+      
+      const segmentTime = Date.now() - segmentStart;
+      segmentTimes.push(segmentTime);
+      completed++;
+      
+      // Calculate ETA
+      if (segmentTimes.length > 0) {
+        const avgTime = segmentTimes.reduce((a, b) => a + b, 0) / segmentTimes.length;
+        const remaining = pendingSegments.length - completed;
+        const etaMs = remaining * avgTime;
+        const etaMinutes = Math.ceil(etaMs / 60000);
+        
+        setBatchProgress(prev => ({ 
+          ...prev, 
+          current: completed,
+          eta: etaMinutes > 0 ? `${etaMinutes} phút` : 'Gần xong'
+        }));
+      }
+      
+      // Small delay between requests
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    setIsProcessing(false);
+    setBatchProgress({ current: 0, total: 0, eta: null });
+    showNotification('Đã tạo xong tất cả đoạn', 'success');
+  };
+
+  // Play segment audio
+  const playSegment = (segmentId) => {
+    const segment = segments.find(s => s.id === segmentId);
+    if (segment && segment.audioUrl) {
+      const audio = new Audio(segment.audioUrl);
+      audio.play();
+    }
+  };
+
+  // Play all segments sequentially
+  const playAllSegments = async () => {
+    if (!sessionId) {
+      showNotification('Không có session để phát', 'error');
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8000/merge_all_segments/${sessionId}`, {
+        method: 'POST'
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          // Play merged audio
+          const audioUrl = `http://localhost:8000/audio/merged/${sessionId}`;
+          const audio = new Audio(audioUrl);
+          audio.play().then(() => {
+            showNotification('Đang phát tất cả đoạn', 'success');
+          }).catch(error => {
+            console.error('Error playing merged audio:', error);
+            showNotification('Lỗi phát audio', 'error');
+          });
+        }
+      } else {
+        throw new Error('Failed to merge segments');
+      }
+    } catch (error) {
+      console.error('Error merging segments:', error);
+      showNotification('Lỗi phát tất cả đoạn', 'error');
+    }
+  };
+
+  // Merge all segments for download
+  const mergeAllSegments = async () => {
+    if (!sessionId) {
+      showNotification('Không có session để merge', 'error');
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8000/merge_all_segments/${sessionId}`, {
+        method: 'POST'
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          // Download merged file
+          const downloadUrl = `http://localhost:8000/audio/merged/${sessionId}`;
+          const a = document.createElement('a');
+          a.href = downloadUrl;
+          a.download = `merged_segments_${sessionId.slice(0, 8)}.wav`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          showNotification('Đã merge và tải xuống thành công', 'success');
+        }
+      } else {
+        throw new Error('Failed to merge segments');
+      }
+    } catch (error) {
+      console.error('Error merging segments:', error);
+      showNotification('Lỗi merge segments', 'error');
+    }
+  };
+
+  // Show notification
+  const showNotification = (message, type) => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  // Load sessions list
+  const loadSessionsList = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/segment/sessions');
+      if (response.ok) {
+        const result = await response.json();
+        setSessionsList(result.sessions);
+        setShowSessionsList(!showSessionsList);
+      }
+    } catch (error) {
+      console.error('Error loading sessions:', error);
+      showNotification('Lỗi tải danh sách phiên', 'error');
+    }
+  };
+
+  // Load existing session
+  const loadExistingSession = async (sessionIdToLoad) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/segment/session/${sessionIdToLoad}`);
+      if (response.ok) {
+        const session = await response.json();
+        setSessionId(sessionIdToLoad);
+        setText(session.text);
+        setSegmentLength(session.segment_length);
+        setSelectedProfile(session.profile_id || '');
+        setSegments(session.segments.map(s => ({
+          ...s,
+          audioUrl: s.status === 'generated' ? `http://localhost:8000/api/segment/audio/${sessionIdToLoad}/${s.id}` : null
+        })));
+        setShowSessionsList(false);
+        showNotification('Đã tải phiên thành công', 'success');
+      }
+    } catch (error) {
+      console.error('Error loading session:', error);
+      showNotification('Lỗi tải phiên', 'error');
+    }
+  };
+
+  // Delete session
+  const deleteSession = async (sessionIdToDelete) => {
+    if (!confirm('Bạn có chắc muốn xóa phiên này?')) return;
+    
+    try {
+      const response = await fetch(`http://localhost:8000/api/segment/session/${sessionIdToDelete}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        setSessionsList(prev => prev.filter(s => s.session_id !== sessionIdToDelete));
+        if (sessionId === sessionIdToDelete) {
+          setSessionId('');
+          setSegments([]);
+        }
+        showNotification('Đã xóa phiên thành công', 'success');
+      }
+    } catch (error) {
+      console.error('Error deleting session:', error);
+      showNotification('Lỗi xóa phiên', 'error');  
+    }
+  };
+
+  // Start editing segment text
+  const startEditingSegment = (segmentId) => {
+    const segment = segments.find(s => s.id === segmentId);
+    if (segment) {
+      setEditingSegment(segmentId);
+      setEditingText(segment.text);
+    }
+  };
+
+  // Save edited segment text and regenerate only that segment
+  const saveEditedSegment = async () => {
+    if (editingSegment === null) return;
+
+    const segment = segments.find(s => s.id === editingSegment);
+    if (!segment || segment.text === editingText.trim()) {
+      setEditingSegment(null);
+      return;
+    }
+
+    try {
+      // Update segment status to processing
+      setSegments(prev => prev.map(s => 
+        s.id === editingSegment ? { ...s, status: 'processing' } : s
+      ));
+      
+      // Use Form data to send text update
+      const formData = new FormData();
+      formData.append('new_text', editingText.trim());
+      
+      const response = await fetch(`http://localhost:8000/update_segment/${sessionId}/${editingSegment}`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        
+        // Update segment in state
+        setSegments(prev => prev.map(s => 
+          s.id === editingSegment ? { 
+            ...s, 
+            text: result.text,
+            status: result.status,
+            audio: result.status === 'completed' ? `http://localhost:8000/audio/${sessionId}/${editingSegment}` : null,
+            generated_at: result.generated_at || s.generated_at
+          } : s
+        ));
+        
+        setEditingSegment(null);
+        setEditingText('');
+        
+        if (result.status === 'completed') {
+          showNotification(`Đã cập nhật và tạo lại đoạn ${editingSegment + 1}`, 'success');
+        } else if (result.status === 'unchanged') {
+          showNotification('Nội dung không thay đổi', 'info');
+        }
+      } else {
+        throw new Error('Failed to update segment');
+      }
+    } catch (error) {
+      console.error('Error updating segment:', error);
+      
+      // Reset segment status on error
+      setSegments(prev => prev.map(s => 
+        s.id === editingSegment ? { ...s, status: 'error' } : s
+      ));
+      
+      showNotification(`Lỗi cập nhật đoạn ${editingSegment + 1}`, 'error');
+    }
+  };
+
+  // Cancel editing
+  const cancelEditingSegment = () => {
+    setEditingSegment(null);
+    setEditingText('');
+  };
+
+  // Import session
+  const importSession = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const importData = JSON.parse(text);
+      
+      const response = await fetch(`${API_BASE}/import_session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(importData)
+      });
+      
+      const result = await response.json();
+      
+      if (response.ok) {
+        showNotification(`Session imported: ${result.total_segments} segments`, 'success');
+        // Optionally load the imported session
+        await loadExistingSession(result.session_id);
+      } else {
+        throw new Error(result.detail || 'Import failed');
+      }
+    } catch (error) {
+      console.error('Failed to import session:', error);
+      showNotification('Failed to import session', 'error');
+    }
+    
+    // Reset file input
+    event.target.value = '';
+  };
+
+  // Get segment status color
+  const getSegmentStatusColor = (status) => {
+    switch (status) {
+      case 'pending': return 'bg-gray-500';
+      case 'processing': return 'bg-yellow-500 animate-pulse';
+      case 'generated': return 'bg-green-500';
+      case 'cached': return 'bg-blue-500';
+      case 'error': return 'bg-red-500';
+      default: return 'bg-gray-500';
+    }
+  };
+
+  return (
+    <div className="min-h-screen py-8 px-4">
+      {/* Back Button */}
+      <div className="fixed top-4 left-4 z-50">
+        <button onClick={onBack} className="btn-outline px-4 py-2">
+          <i className="fas fa-arrow-left mr-2"></i>
+          {t.backToMenu}
+        </button>
+      </div>
+
+      {/* Theme & Language Toggles */}
+      <div className="theme-toggle-left">
+        <ThemeToggle currentTheme={theme} onThemeChange={onThemeChange} t={t} />
+      </div>
+      <div className="language-toggle-right">
+        <LanguageToggle currentLang={language} onLanguageChange={onLanguageChange} />
+      </div>
+
+      {/* Notification */}
+      {notification && (
+        <div className={`fixed top-20 right-4 z-50 px-4 py-2 rounded-lg text-white ${
+          notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+        }`}>
+          {notification.message}
+        </div>
+      )}
+
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <header className="text-center mb-8 animate-fade-in-up">
+          <h1 className="text-4xl md:text-5xl font-bold text-gray-800-title mb-4">
+            {t.segmentTitle}
+          </h1>
+          <p className="text-lg text-gray-600">
+            {t.segmentDesc}
+          </p>
+        </header>
+
+        {/* Main Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Panel - Configuration */}
+          <div className="lg:col-span-1">
+            <div className="card">
+              <h3 className="text-xl font-bold text-white mb-4">
+                <i className="fas fa-cog mr-2"></i>
+                Cấu hình
+              </h3>
+
+              {/* Voice Selection - Copied from ClassicTTS */}
+              <div className="mb-6">
+                <label className="block text-white/80 mb-3 font-semibold">
+                  <i className="fas fa-user-circle mr-2"></i>
+                  {t.voiceSelection}
+                </label>
+                
+                {/* Default Voice Option */}
+                <div className="mb-3">
+                  <button
+                    onClick={() => setSelectedProfile('')}
+                    className={`w-full p-3 rounded-lg border-2 transition-all duration-300 ${!selectedProfile
+                        ? 'border-green-400 bg-green-400/10'
+                        : 'border-white/20 hover:border-white/40'
+                      }`}
+                  >
+                    <div className="flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-r from-green-400 to-blue-500 flex items-center justify-center mr-3">
+                        <i className="fas fa-star text-white text-sm"></i>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-white font-semibold text-sm">
+                          {!selectedProfile ? '✓ Đang sử dụng giọng mặc định' : 'Sử dụng giọng mặc định'}
+                        </div>
+                        <div className="text-white/60 text-xs">Giọng nữ chuẩn tiếng Việt</div>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Profile List */}
+                <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto">
+                  {Object.entries(profiles).map(([profileId, profile]) => (
+                    <button
+                      key={profileId}
+                      onClick={() => setSelectedProfile(profileId)}
+                      className={`p-3 rounded-lg border-2 transition-all duration-300 text-left ${
+                        selectedProfile === profileId
+                          ? 'border-green-400 bg-green-400/10'
+                          : 'border-white/20 hover:border-white/40'
+                      }`}
+                    >
+                      <div className="flex items-center">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-400 to-pink-500 flex items-center justify-center mr-3">
+                          <i className="fas fa-microphone text-white text-sm"></i>
+                        </div>
+                        <div>
+                          <div className="text-white font-semibold text-sm">
+                            {selectedProfile === profileId ? '✓ ' : ''}{profile.display_name || profileId}
+                          </div>
+                          <div className="text-white/60 text-xs truncate">
+                            {profile.description || 'Voice profile'}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Profile List - Horizontal Layout with Scroll for 3+ Profiles */}
-              <div className={`${Object.keys(profiles).length > 3 ? 'max-h-64 overflow-y-auto' : ''} grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4`}>
-                {Object.entries(profiles).map(([profileId, profile]) => (
-                  <VoiceProfileCard
-                    key={profileId}
-                    profileId={profileId}
-                    profile={profile}
-                    isSelected={selectedProfile === profileId}
-                    onSelect={setSelectedProfile}
-                    onEdit={() => { }}
-                    onDelete={handleDeleteProfile}
-                    t={t}
-                  />
-                ))}
+              {/* Segment Length */}
+              <div className="mb-4">
+                <label className="block text-white/80 mb-2">
+                  {t.segmentLength}: {segmentLength} {t.characters}
+                </label>
+                <input
+                  type="range"
+                  min="20"
+                  max="200"
+                  value={segmentLength}
+                  onChange={(e) => setSegmentLength(parseInt(e.target.value))}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-sm text-white/60 mt-1">
+                  <span>20</span>
+                  <span>200</span>
+                </div>
               </div>
 
-              {/* Add Profile Button */}
-              <div className="text-center">
-                <button
-                  onClick={() => setShowAddProfile(true)}
-                  className="btn-outline px-8"
-                >
-                  <i className="fas fa-plus mr-2"></i>
-                  {t.addNewProfile}
-                </button>
+              {/* Session List Dropdown */}
+              {showSessionsList && sessionsList.length > 0 && (
+                <div className="bg-white/5 border border-white/20 rounded-lg p-2 max-h-40 overflow-y-auto">
+                  <div className="text-white/60 text-xs mb-2">Các phiên gần đây:</div>
+                  {sessionsList.map((session) => (
+                    <div key={session.session_id} 
+                         className="flex justify-between items-center p-2 hover:bg-white/5 rounded cursor-pointer"
+                         onClick={() => loadExistingSession(session.session_id)}>
+                      <div className="flex-1">
+                        <div className="text-white text-sm truncate">{session.text_preview}</div>
+                        <div className="text-white/40 text-xs">
+                          {session.completion_rate} • {new Date(session.updated_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <button
+                        onClick={(e) => {e.stopPropagation(); deleteSession(session.session_id);}}
+                        className="text-red-400 hover:text-red-300 ml-2"
+                        title="Xóa phiên"
+                      >
+                        <i className="fas fa-trash text-xs"></i>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Advanced Settings */}
+              <div className="border-t border-white/10 pt-4">
+                <details className="mb-3">
+                  <summary className="text-white/80 cursor-pointer hover:text-white">
+                    <i className="fas fa-cog mr-2"></i>Advanced Settings
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <label className="text-white/60 text-sm block mb-1">Segment Length</label>
+                      <select 
+                        value={segmentLength} 
+                        onChange={(e) => setSegmentLength(parseInt(e.target.value))}
+                        className="w-full bg-white/5 border border-white/20 rounded px-2 py-1 text-white text-sm"
+                      >
+                        <option value={30}>30 seconds</option>
+                        <option value={60}>60 seconds</option>
+                        <option value={90}>90 seconds</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="flex items-center text-white/80">
+                        <input 
+                          type="checkbox" 
+                          checked={autoGenerate} 
+                          onChange={(e) => setAutoGenerate(e.target.checked)}
+                          className="mr-2"
+                        />
+                        Auto-generate segments
+                      </label>
+                    </div>
+                  </div>
+                </details>
+              </div>
+
+
+
+              {/* Statistics */}
+              <div className="text-white/60 text-sm">
+                <p>Văn bản: {text.length} {t.characters}</p>
+                <p>Đoạn: {segments.length}</p>
+                <p>Đã tạo: {segments.filter(s => s.status === 'generated').length}</p>
               </div>
             </div>
           </div>
 
-          {/* Content Grid - Text Input and Monitoring */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left Column - Text Input & Controls */}
-            <div className="lg:col-span-2 space-y-6">
+          {/* Right Panel - Main Workspace */}
+          <div className="lg:col-span-2 space-y-6">
             {/* Text Input */}
-            <div className="card animate-fade-in-up">
-              <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
-                <i className="fas fa-edit mr-3"></i>
+            <div className="card">
+              <h3 className="text-xl font-bold text-white mb-4">
+                <i className="fas fa-edit mr-2"></i>
                 {t.textInput}
-              </h2>
-
+              </h3>
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder={t.textPlaceholder}
-                className="form-textarea h-40 mb-4"
+                className="w-full h-32 px-3 py-2 bg-white border border-gray-300 rounded-lg text-black resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-
-              <div className="flex justify-between items-center text-white/60 text-sm mb-4">
-                <span>
-                  {text.length.toLocaleString()} {t.characters}
+              <div className="flex justify-between items-center mt-4">
+                <span className="text-white/60 text-sm">
+                  {text.length} {t.characters}
                 </span>
-                <span>
-                  {text.split(' ').filter(w => w.length > 0).length} {t.words}
-                  <span className="text-green-400 ml-2">
-                    • Unlimited processing
-                  </span>
-                </span>
+                <button
+                  onClick={splitTextIntoSegments}
+                  className="btn-primary"
+                  disabled={!text.trim()}
+                >
+                  <i className="fas fa-cut mr-2"></i>
+                  {t.splitText}
+                </button>
               </div>
-
-              {/* Cleaned Text Preview */}
-              {text && cleanVietnameseText(text) !== text && (
-                <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-blue-400 text-sm font-medium flex items-center">
-                      <i className="fas fa-broom mr-2"></i>
-                      Văn bản đã làm sạch (sẽ được gửi đến TTS)
-                    </h4>
-                    <span className="text-blue-300 text-xs">
-                      {cleanVietnameseText(text).length} ký tự
-                    </span>
-                  </div>
-                  <div className="text-white/80 text-sm bg-black/20 p-2 rounded max-h-20 overflow-y-auto">
-                    {cleanVietnameseText(text) || <span className="text-red-400">Không có nội dung hợp lệ sau khi làm sạch</span>}
-                  </div>
-                </div>
-              )}
-
-              {/* Example Texts */}
-              <div className="mb-6">
-                <h3 className="text-white font-medium mb-3 flex items-center">
-                  <i className="fas fa-lightbulb mr-2"></i>
-                  {t.exampleTexts}
-                </h3>
-                <div className="rotating-example">
-                  <button
-                    onClick={() => setText(exampleTexts[language][currentExampleIndex])}
-                    className="text-left p-3 rounded-lg bg-white/5 hover:bg-white/10 text-white/80 text-sm transition-all duration-300 hover:transform hover:scale-105 w-full"
-                  >
-                    {exampleTexts[language][currentExampleIndex]}
-                  </button>
-                </div>
-              </div>
-
-              {/* Synthesize Button */}
-              <button
-                onClick={handleSynthesize}
-                disabled={loading || !text.trim()}
-                className="btn-primary w-full text-lg py-4 relative overflow-hidden"
-              >
-                {loading ? (
-                  <div className="flex items-center justify-center">
-                    <LoadingSpinner size="small" />
-                    <span className="ml-3">{t.generating}</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center">
-                    <i className="fas fa-microphone mr-3"></i>
-                    {t.generateSpeech}
-                  </div>
-                )}
-              </button>
             </div>
 
-            {/* Audio Player */}
-            {audio && (
-              <div className="card animate-fade-in-up">
-                <h3 className="text-xl font-bold text-white mb-4 flex items-center">
-                  <i className="fas fa-play-circle mr-3"></i>
-                  {t.result}
-                </h3>
+            {/* Progress Bar */}
+            {isProcessing && batchProgress.total > 0 && (
+              <div className="card mb-6">
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-lg font-bold text-white">
+                    <i className="fas fa-spinner fa-spin mr-2"></i>
+                    Đang xử lý batch
+                  </h4>
+                  <div className="text-white/70 text-sm">
+                    {batchProgress.current}/{batchProgress.total}
+                    {batchProgress.eta && ` • ETA: ${batchProgress.eta}`}
+                  </div>
+                </div>
+                <div className="w-full bg-white/10 rounded-full h-3 mb-2">
+                  <div 
+                    className="bg-gradient-to-r from-blue-500 to-indigo-600 h-3 rounded-full transition-all duration-300"
+                    style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+                  ></div>
+                </div>
+                <div className="text-white/60 text-xs">
+                  {Math.round((batchProgress.current / batchProgress.total) * 100)}% hoàn thành
+                </div>
+              </div>
+            )}
 
-                <AudioVisualizer isPlaying={isPlaying} />
+            {/* Segments List */}
+            {segments.length > 0 && (
+              <div className="card">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-white">
+                    <i className="fas fa-list mr-2"></i>
+                    {segments.length} {t.segments}
+                  </h3>
+                  <button
+                    onClick={generateAllSegments}
+                    disabled={isProcessing}
+                    className="btn-primary mr-2"
+                  >
+                    <i className="fas fa-play-circle mr-2"></i>
+                    {isProcessing ? t.processing : t.generateAll}
+                  </button>
+                  
+                  {segments.some(s => s.status === 'completed') && (
+                    <button
+                      onClick={playAllSegments}
+                      className="btn-outline mr-2 bg-green-500/20 text-green-300 hover:bg-green-500/30"
+                    >
+                      <i className="fas fa-volume-up mr-2"></i>
+                      Phát tất cả
+                    </button>
+                  )}
+                  
+                  {segments.some(s => s.status === 'generated') && (
+                    <button
+                      onClick={mergeAllSegments}
+                      className="btn-outline"
+                    >
+                      <i className="fas fa-compress-arrows-alt mr-2"></i>
+                      {t.mergeAll}
+                    </button>
+                  )}
+                </div>
 
-                <audio
-                  ref={audioRef}
-                  src={audio}
-                  controls
-                  className="w-full mb-4 rounded-lg"
-                  style={{
-                    background: 'rgba(255,255,255,0.1)',
-                    backdropFilter: 'blur(10px)'
-                  }}
-                />
-
-                <button
-                  onClick={downloadAudio}
-                  className="btn-success w-full"
-                >
-                  <i className="fas fa-download mr-2"></i>
-                  {t.download}
-                </button>
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {segments.map((segment) => (
+                    <div key={segment.id} className="border border-white/20 rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center">
+                          <span className="text-white font-medium mr-3">
+                            {t.segment} {segment.id + 1}
+                          </span>
+                          <div className="flex space-x-2">
+                            <span className={`px-2 py-1 rounded-full text-xs text-white ${getSegmentStatusColor(segment.status)}`}>
+                              {t[segment.status] || segment.status}
+                            </span>
+                            {segment.status === 'generated' && (
+                              <span className="px-2 py-1 rounded-full text-xs bg-blue-500/20 text-blue-300">
+                                <i className="fas fa-database mr-1"></i>Cached
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex space-x-2">
+                          {/* Audio Player for each segment */}
+                          {segment.status === 'completed' && segment.audio && (
+                            <audio 
+                              controls 
+                              className="w-48 h-8"
+                              src={`http://localhost:8000${segment.audio}`}
+                              style={{ transform: 'scale(0.8)' }}
+                            >
+                              Your browser does not support audio.
+                            </audio>
+                          )}
+                          {segment.status === 'generated' && (
+                            <button
+                              onClick={() => playSegment(segment.id)}
+                              className="text-green-400 hover:text-green-300"
+                              title={t.playSegment}
+                            >
+                              <i className="fas fa-play"></i>
+                            </button>
+                          )}
+                          <button
+                            onClick={() => startEditingSegment(segment.id)}
+                            className="text-yellow-400 hover:text-yellow-300"
+                            title={t.editSegment}
+                          >
+                            <i className="fas fa-edit"></i>
+                          </button>
+                          <button
+                            onClick={() => generateSegment(segment.id)}
+                            disabled={segment.status === 'processing'}
+                            className="text-blue-400 hover:text-blue-300"
+                            title={segment.status === 'generated' ? t.regenerateSegment : t.generateSegment}
+                          >
+                            <i className="fas fa-sync-alt"></i>
+                          </button>
+                          {segment.status === 'generated' && (
+                            <button
+                              onClick={() => clearSegmentCache(segment.id)}
+                              className="text-orange-400 hover:text-orange-300"
+                              title="Clear Cache"
+                            >
+                              <i className="fas fa-trash-alt"></i>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Text Display/Edit */}
+                      {editingSegment === segment.id ? (
+                        <div className="mb-2">
+                          <textarea
+                            value={editingText}
+                            onChange={(e) => setEditingText(e.target.value)}
+                            className="segment-input resize-none"
+                            rows="3"
+                            placeholder="Nhập nội dung segment..."
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && e.ctrlKey) {
+                                saveEditedSegment();
+                              }
+                              if (e.key === 'Escape') {
+                                cancelEditingSegment();
+                              }
+                            }}
+                            autoFocus
+                          />
+                          <div className="flex space-x-2 mt-1">
+                            <button
+                              onClick={saveEditedSegment}
+                              className="px-2 py-1 bg-green-500/20 text-green-300 rounded text-xs"
+                            >
+                              <i className="fas fa-check mr-1"></i>Lưu
+                            </button>
+                            <button
+                              onClick={cancelEditingSegment}
+                              className="px-2 py-1 bg-red-500/20 text-red-300 rounded text-xs"
+                            >
+                              <i className="fas fa-times mr-1"></i>Hủy
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-white/70 text-sm mb-2 cursor-pointer hover:text-white/90"
+                           onClick={() => startEditingSegment(segment.id)}
+                           title="Click để chỉnh sửa">
+                          {segment.text}
+                        </p>
+                      )}
+                      
+                      {/* Audio Player */}
+                      {segment.status === 'completed' && segment.audio && (
+                        <div className="mt-3 p-2 bg-white/5 rounded-lg">
+                          <audio 
+                            controls 
+                            className="w-full"
+                            style={{ height: '32px' }}
+                          >
+                            <source src={`http://localhost:8000${segment.audio}`} type="audio/wav" />
+                            Trình duyệt không hỗ trợ audio player
+                          </audio>
+                        </div>
+                      )}
+                      
+                      {segment.generated_at && (
+                        <p className="text-white/40 text-xs mt-2">
+                          Tạo lúc: {new Date(segment.generated_at).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
-
-          {/* Right Column - Monitoring & Statistics */}
-          <div className="space-y-6">
-            {/* GPU Status Monitor */}
-            <GPUMonitor t={t} />
-
-            {/* Render Status Monitor */}
-            <RenderStatusMonitor t={t} onEmergencyStop={handleEmergencyStop} />
-
-            {/* Recent Renders History */}
-            <RecentRenders 
-              t={t} 
-              recentRenders={recentRenders}
-              loading={rendersLoading}
-              pagination={rendersPagination}
-              onPageChange={handlePageChange}
-              onPlayRender={handlePlayRender}
-            />
-
-            {/* Enhanced Statistics */}
-            <div className="card animate-slide-in-right" style={{ animationDelay: '0.4s' }}>
-              <h3 className="text-lg font-bold text-white mb-4 flex items-center">
-                <i className="fas fa-chart-bar mr-3"></i>
-                {t.statistics}
-              </h3>
-              <div className="space-y-3">
-                <div className="flex justify-between text-white/80">
-                  <span>{t.profiles}:</span>
-                  <span className="font-semibold">{Object.keys(profiles).length}</span>
-                </div>
-                <div className="flex justify-between text-white/80">
-                  <span>Processing:</span>
-                  <span className="font-semibold text-green-400">Sentence-by-sentence</span>
-                </div>
-                <div className="flex justify-between text-white/80">
-                  <span>{t.estimatedTime}:</span>
-                  <span className="font-semibold">~{estimateProcessingTime()}s</span>
-                </div>
-                {lastGenerationTime && (
-                  <div className="flex justify-between text-green-400">
-                    <span>Last generation:</span>
-                    <span className="font-semibold">{lastGenerationTime}s</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Add Profile Modal */}
-        <Modal
-          isOpen={showAddProfile}
-          onClose={() => setShowAddProfile(false)}
-          title={t.createProfile}
-        >
-          <form onSubmit={handleAddProfile} className="space-y-4">
-            <div>
-              <label className="block text-white font-medium mb-2">{t.profileName}:</label>
-              <input
-                type="text"
-                value={profileForm.name}
-                onChange={(e) => setProfileForm(prev => ({ ...prev, name: e.target.value }))}
-                className="form-input"
-                placeholder="e.g. my_voice"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-white font-medium mb-2">{t.displayName}:</label>
-              <input
-                type="text"
-                value={profileForm.display_name}
-                onChange={(e) => setProfileForm(prev => ({ ...prev, display_name: e.target.value }))}
-                className="form-input"
-                placeholder="e.g. My Voice"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-white font-medium mb-2">{t.description}:</label>
-              <input
-                type="text"
-                value={profileForm.description}
-                onChange={(e) => setProfileForm(prev => ({ ...prev, description: e.target.value }))}
-                className="form-input"
-                placeholder="Brief voice description"
-              />
-            </div>
-
-            <div>
-              <label className="block text-white font-medium mb-2">{t.sampleTranscript}:</label>
-              <textarea
-                value={profileForm.sample_text}
-                onChange={(e) => setProfileForm(prev => ({ ...prev, sample_text: e.target.value }))}
-                className="form-textarea h-24"
-                placeholder="Enter the exact text content of your audio sample..."
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-white font-medium mb-2">{t.audioSample}:</label>
-              <input
-                type="file"
-                accept=".wav,.mp3,.m4a,.flac"
-                onChange={(e) => setProfileForm(prev => ({ ...prev, sample_wav: e.target.files[0] }))}
-                className="form-input"
-                required
-              />
-            </div>
-
-            <div className="flex space-x-4 pt-4">
-              <button type="submit" className="btn-primary flex-1">
-                <i className="fas fa-save mr-2"></i>
-                {t.createButton}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowAddProfile(false)}
-                className="btn-outline flex-1"
-              >
-                {t.cancel}
-              </button>
-            </div>
-          </form>
-        </Modal>
-
-        {/* Notification */}
-        {notification && (
-          <Notification
-            type={notification.type}
-            message={notification.message}
-            onClose={() => setNotification(null)}
-          />
-        )}
         </div>
       </div>
     </div>
+  );
+};
+
+// === MAIN APP === //
+function App() {
+  const [language, setLanguage] = useState(() => {
+    return localStorage.getItem('language') || 'vi';
+  });
+
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('theme') || 'light';
+  });
+
+  const [currentMode, setCurrentMode] = useState(null);
+
+  const t = translations[language];
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const handleLanguageChange = (lang) => {
+    setLanguage(lang);
+    localStorage.setItem('language', lang);
+  };
+
+  const handleSelectMode = (mode) => {
+    setCurrentMode(mode);
+  };
+
+  const handleBackToModeSelection = () => {
+    setCurrentMode(null);
+  };
+
+  if (currentMode === 'classic') {
+    return (
+      <ClassicTTS
+        onBack={handleBackToModeSelection}
+        t={t}
+        theme={theme}
+        language={language}
+        onLanguageChange={handleLanguageChange}
+        onThemeChange={setTheme}
+      />
+    );
+  }
+
+  if (currentMode === 'segment') {
+    return (
+      <SegmentTTS
+        onBack={handleBackToModeSelection}
+        t={t}
+        theme={theme}
+        language={language}
+        onLanguageChange={handleLanguageChange}
+        onThemeChange={setTheme}
+      />
+    );
+  }
+
+  return (
+    <ModeSelection
+      onSelectMode={handleSelectMode}
+      t={t}
+      theme={theme}
+      language={language}
+      onLanguageChange={handleLanguageChange}
+      onThemeChange={setTheme}
+    />
   );
 }
 
