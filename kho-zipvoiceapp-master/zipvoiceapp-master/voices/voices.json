@@ -1,0 +1,16 @@
+{
+  "voices": [
+    {
+      "name": "Kiếm hiệp",
+      "promptText": "Mỗi người trong chúng ta đều mang theo những ước mơ thầm kín. Dù hành trình phía trước đầy khó khăn, chỉ cần không bỏ cuộc, ta sẽ đến được nơi mình mong muốn.",
+      "promptWav": "D:\\zipvoiceapp\\voices\\Ki_m_hi_p_1758694136179.wav",
+      "createdAt": "2025-09-24T06:08:56.180Z"
+    },
+    {
+      "name": "Quỷ bí",
+      "promptText": "Mỗi người trong chúng ta đều mang theo những ước mơ thầm kín. Dù hành trình phía trước đầy khó khăn, chỉ cần không bỏ cuộc, ta sẽ đến được nơi mình mong muốn.",
+      "promptWav": "D:\\zipvoiceapp\\voices\\Qu__b__1758694677726.wav",
+      "createdAt": "2025-09-24T06:17:57.727Z"
+    }
+  ]
+}

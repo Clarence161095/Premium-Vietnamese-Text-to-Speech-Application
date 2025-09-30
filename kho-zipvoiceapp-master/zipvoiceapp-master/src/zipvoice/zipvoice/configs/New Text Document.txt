@@ -1,0 +1,7 @@
+{
+  "zipvoice_vietnamese": {
+    "model_path": "D:/zipvoiceapp/src/zipvoice/exp/iter-96000-avg-2.pt",
+    "config_path": "D:/zipvoiceapp/src/zipvoice/exp/model.json",
+    "tokens_path": "D:/zipvoiceapp/src/zipvoice/exp/tokens.txt"
+  }
+}
