@@ -1,0 +1,48 @@
+services:
+  zipvoice-app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: zipvoice-app
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount model directory - bạn có thể đặt model files ở đây
+      - ./src/zipvoice/exp:/app/src/zipvoice/exp
+      # Mount prompts directory
+      - ./src/zipvoice/prompts:/app/src/zipvoice/prompts
+      # Mount voices directory để lưu giọng đã tạo
+      - ./voices:/app/voices
+      # Mount sound effects directory
+      - ./public/soundeffect:/app/public/soundeffect
+      # Mount outputs và uploads để lưu file tạm - tự động tạo nếu chưa có
+      - zipvoice-outputs:/app/output
+      - zipvoice-uploads:/app/uploads
+    environment:
+      - NODE_ENV=production
+      - PYTHONPATH=/app/src/zipvoice
+      - PYTHON_PATH=/usr/local/bin/python3
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    restart: unless-stopped
+    networks:
+      - zipvoice-network
+    # GPU support và unlimited resources  
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+networks:
+  zipvoice-network:
+    driver: bridge
+
+volumes:
+  zipvoice-outputs:
+    driver: local
+  zipvoice-uploads:
+    driver: local

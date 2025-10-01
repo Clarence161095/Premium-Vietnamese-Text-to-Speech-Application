@@ -4,7 +4,6 @@ import path from 'path';
 import { promisify } from 'util';
 
 const writeFile = promisify(fs.writeFile);
-const rename = promisify(fs.rename);
 
 type VoiceMeta = {
   name: string;

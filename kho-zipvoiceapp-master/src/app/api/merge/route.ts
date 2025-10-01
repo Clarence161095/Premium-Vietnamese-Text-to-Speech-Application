@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
 
     const ffmpegResult = await tryFfmpegConcat();
     if (ffmpegResult) {
-      let extraHeaders: Record<string, string> = {};
+      const extraHeaders: Record<string, string> = {};
       if (saveFlag) {
         const outputDir = path.join(process.cwd(), 'output');
         if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
       for (const p of deletePaths) {
         try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch {}
       }
-      return new NextResponse(ffmpegResult, {
+      return new NextResponse(Buffer.from(ffmpegResult), {
         headers: {
           'Content-Type': 'audio/wav',
           'Content-Disposition': `attachment; filename="${outName}"`,
@@ -273,7 +273,7 @@ export async function POST(request: NextRequest) {
       cursor += frames * bytesPerSample * targetNumChannels;
     }
 
-    let extraHeaders: Record<string, string> = {};
+    const extraHeaders: Record<string, string> = {};
     if (saveFlag) {
       const outputDir = path.join(process.cwd(), 'output');
       if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
@@ -286,7 +286,7 @@ export async function POST(request: NextRequest) {
       try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch {}
     }
 
-    return new NextResponse(out, {
+    return new NextResponse(Buffer.from(out), {
       headers: {
         'Content-Type': 'audio/wav',
         'Content-Disposition': `attachment; filename="${outName}"`,

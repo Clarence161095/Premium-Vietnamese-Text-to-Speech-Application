@@ -5,8 +5,6 @@ import { normalizeInputText, splitIntoBatchesByNewline, type CustomMapping } fro
 import InfoPanel from './components/InfoPanel';
 
 export default function Home() {
-  const [promptWav, setPromptWav] = useState<File | null>(null); // legacy, không dùng trong form chính
-  const [promptText, setPromptText] = useState(''); // legacy, không dùng trong form chính
   const [voiceName, setVoiceName] = useState('');
   const [text, setText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -14,7 +12,6 @@ export default function Home() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   // Batch and normalization state
   const [mappings, setMappings] = useState<CustomMapping[]>([]);
-  const [mappingInput, setMappingInput] = useState(''); // legacy, no longer used in UI
   type DictEntry = { from: string; to: string };
   type Dictionary = { id: string; name: string; entries: DictEntry[] };
   const [dictionaries, setDictionaries] = useState<Dictionary[]>([]);
@@ -47,7 +44,7 @@ export default function Home() {
   const [isAutoPlay, setIsAutoPlay] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const runIdRef = useRef(0);
-  const [modelDir, setModelDir] = useState('D:/zipvoiceapp/src/zipvoice/exp');
+  const [modelDir, setModelDir] = useState('/app/src/zipvoice/exp');
   const [checkpointName, setCheckpointName] = useState('iter-96000-avg-2.pt');
   const [tokenizer, setTokenizer] = useState('espeak');
   const [lang, setLang] = useState('vi');
@@ -414,7 +411,7 @@ export default function Home() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {savedVoices.length === 0 && (
-                    <span className="text-sm text-gray-500 dark:text-gray-400">Chưa có giọng nào. Nhấn "Thêm giọng mới" để tạo.</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Chưa có giọng nào. Nhấn &quot;Thêm giọng mới&quot; để tạo.</span>
                   )}
                   {savedVoices.map((v) => {
                     const selected = voiceName === v.name;

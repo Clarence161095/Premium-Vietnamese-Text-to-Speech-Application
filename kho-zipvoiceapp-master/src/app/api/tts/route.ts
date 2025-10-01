@@ -10,14 +10,38 @@ const unlink = promisify(fs.unlink);
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-    // Optional: allow passing a pre-normalized flag to skip internal normalization when handled on client
     const isNormalized = (formData.get('normalized') as string | null) === 'true';
     const promptWav = formData.get('promptWav') as File | null;
     const promptText = formData.get('promptText') as string | null;
     const voiceName = (formData.get('voiceName') as string | null)?.trim();
     let text = formData.get('text') as string;
-    const modelDir = formData.get('modelDir') as string || 'D:/zipvoiceapp/src/zipvoice/exp';
-    const checkpointName = formData.get('checkpointName') as string || 'iter-96000-avg-2.pt';
+
+    if (!text) {
+      return NextResponse.json({ error: 'Text is required' }, { status: 400 });
+    }
+    const modelDir = formData.get('modelDir') as string || '/app/src/zipvoice/exp';
+    let checkpointName = formData.get('checkpointName') as string || '';
+    
+    // Auto-detect checkpoint if not provided
+    if (!checkpointName) {
+      try {
+        const modelFiles = fs.readdirSync(modelDir).filter(f => f.endsWith('.pt'));
+        if (modelFiles.length > 0) {
+          // Sort by iteration number (highest first)
+          const sortedFiles = modelFiles.sort((a, b) => {
+            const iterA = parseInt(a.match(/iter-(\d+)/)?.[1] || '0');
+            const iterB = parseInt(b.match(/iter-(\d+)/)?.[1] || '0');
+            return iterB - iterA;
+          });
+          checkpointName = sortedFiles[0];
+          console.log('Auto-detected checkpoint:', checkpointName);
+        } else {
+          checkpointName = 'iter-525000-avg-2.pt'; // fallback
+        }
+      } catch (e) {
+        checkpointName = 'iter-525000-avg-2.pt'; // fallback
+      }
+    }
     const tokenizer = formData.get('tokenizer') as string || 'espeak';
     const lang = formData.get('lang') as string || 'vi';
 
@@ -27,12 +51,18 @@ export async function POST(request: NextRequest) {
     // Nếu có voiceName thì lấy từ kho lưu giọng
     if (voiceName) {
       const voicesMetaPath = path.join(process.cwd(), 'voices', 'voices.json');
+      console.log('Looking for voices at:', voicesMetaPath);
+      console.log('Voices file exists:', fs.existsSync(voicesMetaPath));
       if (fs.existsSync(voicesMetaPath)) {
         const meta = JSON.parse(fs.readFileSync(voicesMetaPath, 'utf-8')) as { voices: { name: string; promptText: string; promptWav: string }[] };
+        console.log('Available voices:', meta.voices.map(v => v.name));
         const found = meta.voices.find((v) => v.name.toLowerCase() === voiceName.toLowerCase());
+        console.log('Found voice:', found ? found.name : 'none');
         if (found) {
           promptWavPath = found.promptWav;
           if (!promptTextFinal) promptTextFinal = found.promptText;
+          console.log('Set promptWavPath:', promptWavPath);
+          console.log('Set promptTextFinal:', promptTextFinal);
         }
       }
     }
@@ -48,7 +78,18 @@ export async function POST(request: NextRequest) {
       await writeFile(promptWavPath, Buffer.from(promptWavBuffer));
     }
 
+    console.log('Before validation:', {
+      promptWavPath,
+      promptTextFinal,
+      text: text?.substring(0, 20)
+    });
+    
     if (!promptWavPath || !promptTextFinal || !text) {
+      console.log('Validation failed:', {
+        promptWavPath: !!promptWavPath,
+        promptTextFinal: !!promptTextFinal, 
+        text: !!text
+      });
       return NextResponse.json(
         { error: 'Thiếu thông tin: prompt/voiceName, promptText hoặc text' },
         { status: 400 }
@@ -83,9 +124,8 @@ export async function POST(request: NextRequest) {
     const outputFileName = `result_${Date.now()}.wav`;
     const outputPath = path.join(outputDir, outputFileName);
 
-    // Tạo đường dẫn Python
-    const pythonPath = 'C:\\Users\\Del25\\.conda\\envs\\zipvoice\\python.exe';
-    const scriptPath = path.join(process.cwd(), 'src', 'zipvoice', 'zipvoice', 'bin', 'infer_zipvoice.py');
+    // Tạo đường dẫn Python - sử dụng biến môi trường hoặc mặc định trong container
+    const pythonPath = process.env.PYTHON_PATH || '/usr/local/bin/python3';
 
     // Chuẩn bị lệnh
     const args = [
@@ -102,18 +142,23 @@ export async function POST(request: NextRequest) {
 
     console.log('Chạy lệnh:', pythonPath, args.join(' '));
 
-    // Thực thi lệnh ZipVoice
+    // Thực thi lệnh ZipVoice với timeout 10 phút cho CPU processing
     const result = await new Promise<{ success: boolean; error?: string; outputPath?: string }>((resolve) => {
       const pythonProcess = spawn(pythonPath, args, {
         cwd: path.join(process.cwd(), 'src', 'zipvoice'),
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, PYTHONPATH: process.env.PYTHONPATH || '/app/src/zipvoice' }
       });
 
-      let stdout = '';
+      // Timeout 10 phút cho CPU processing
+      const timeout = setTimeout(() => {
+        pythonProcess.kill();
+        resolve({ success: false, error: 'Timeout: TTS generation took too long (CPU mode)' });
+      }, 600000); // 10 minutes
+
       let stderr = '';
 
       pythonProcess.stdout?.on('data', (data) => {
-        stdout += data.toString();
         console.log('STDOUT:', data.toString());
       });
 
@@ -123,6 +168,7 @@ export async function POST(request: NextRequest) {
       });
 
       pythonProcess.on('close', (code) => {
+        clearTimeout(timeout);
         console.log(`Process exited with code ${code}`);
         if (code === 0 && fs.existsSync(outputPath)) {
           resolve({ success: true, outputPath });
@@ -135,6 +181,7 @@ export async function POST(request: NextRequest) {
       });
 
       pythonProcess.on('error', (error) => {
+        clearTimeout(timeout);
         console.error('Process error:', error);
         resolve({ success: false, error: error.message });
       });

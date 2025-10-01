@@ -21,9 +21,10 @@ function ensureMeta(): { voices: VoiceMeta[] } {
   return JSON.parse(fs.readFileSync(META_FILE, 'utf-8')) as { voices: VoiceMeta[] };
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { name: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ name: string }> }) {
   try {
-    const name = decodeURIComponent(params.name || '').trim();
+    const { name: paramName } = await params;
+    const name = decodeURIComponent(paramName || '').trim();
     if (!name) return NextResponse.json({ error: 'Thiếu tên giọng' }, { status: 400 });
 
     const meta = ensureMeta();
@@ -61,9 +62,10 @@ export async function PUT(request: NextRequest, { params }: { params: { name: st
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { name: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ name: string }> }) {
   try {
-    const name = decodeURIComponent(params.name || '').trim();
+    const { name: paramName } = await params;
+    const name = decodeURIComponent(paramName || '').trim();
     if (!name) return NextResponse.json({ error: 'Thiếu tên giọng' }, { status: 400 });
     const meta = ensureMeta();
     const idx = meta.voices.findIndex((v) => v.name.toLowerCase() === name.toLowerCase());

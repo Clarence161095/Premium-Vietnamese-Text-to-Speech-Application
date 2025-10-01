@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
-import path from 'path';
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,7 +8,7 @@ export async function GET(request: NextRequest) {
 
     const modelDir = dirParam && dirParam.trim().length > 0
       ? dirParam
-      : 'D:/zipvoiceapp/src/zipvoice/exp';
+      : '/app/src/zipvoice/exp';
 
     if (!fs.existsSync(modelDir)) {
       return NextResponse.json({ checkpoints: [], error: 'Model directory không tồn tại' }, { status: 400 });
